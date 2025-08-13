@@ -1,0 +1,53 @@
+{
+  "browser": {
+    "show_home_button": true,
+    "home_page": "file:///usr/share/HackerOS/Scripts/HackerOS-Apps/HackerOS-Search-Engine/index.html",
+    "new_tab_page_location": "speed_dial",
+    "use_dark_mode": true
+  },
+  "startup": {
+    "urls_to_open_on_startup": [
+      "file:///usr/share/HackerOS/Scripts/HackerOS-Apps/HackerOS-Search-Engine/index.html"
+    ],
+    "restore_on_startup": 1
+  },
+  "side_panel": {
+    "enabled": true,
+    "last_active_panel": "bookmarks"
+  },
+  "profile": {
+    "default_zoom_level": 0,
+    "use_custom_font": true,
+    "font_family": {
+      "standard": "Fira Code, Consolas, monospace",
+      "serif": "Georgia, serif",
+      "sans_serif": "Segoe UI, Tahoma, sans-serif",
+      "fixed": "Fira Code, Consolas, monospace"
+    },
+    "font_size": 14,
+    "minimum_font_size": 12
+  },
+  "ui": {
+    "animations_enabled": true,
+    "tab_strip": {
+      "position": "top",
+      "stacked_tabs_enabled": false
+    }
+  },
+  "window_placement": {
+    "bottom": 840,
+    "left": 350,
+    "maximized": false,
+    "right": 1380,
+    "top": 300,
+    "work_area_bottom": 1080,
+    "work_area_left": 0,
+    "work_area_right": 1920,
+    "work_area_top": 0
+  },
+  "transparency": {
+    "enabled": true,
+    "level": 0.85
+  },
+  "version": 1
+}
