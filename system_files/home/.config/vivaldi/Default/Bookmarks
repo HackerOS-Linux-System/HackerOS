@@ -1,0 +1,94 @@
+{
+  "checksum": "somehash",
+  "roots": {
+    "bookmark_bar": {
+      "children": [
+        {
+          "date_added": "13264695363932160",
+          "id": "1",
+          "name": "HackerOS Website",
+          "type": "url",
+          "url": "https://hackeros.webnode.page/"
+        },
+        {
+          "date_added": "13264695363932161",
+          "id": "2",
+          "name": "HackerOS Documentation",
+          "type": "url",
+          "url": "https://hackeros.webnode.page/hackeros-documentation/"
+        },
+        {
+          "date_added": "13264695363932162",
+          "id": "3",
+          "name": "HackerOS Write to Us",
+          "type": "url",
+          "url": "https://hackeros.webnode.page/hackeros-privacy-policy/"
+        },
+        {
+          "date_added": "13264695363932163",
+          "id": "4",
+          "name": "HackerOS Discord",
+          "type": "url",
+          "url": "https://discord.gg/8yHNcBaEKy"
+        },
+        {
+          "date_added": "13264695363932164",
+          "id": "5",
+          "name": "Fedora Website",
+          "type": "url",
+          "url": "https://fedoraproject.org/"
+        },
+        {
+          "children": [
+            {
+              "date_added": "13264695363932165",
+              "id": "6",
+              "name": "Dev Docs",
+              "type": "url",
+              "url": "https://hackeros.webnode.page/hackeros-documentation/"
+            },
+            {
+              "date_added": "13264695363932166",
+              "id": "7",
+              "name": "Tools",
+              "type": "folder",
+              "children": [
+                {
+                  "date_added": "13264695363932167",
+                  "id": "8",
+                  "name": "Discord",
+                  "type": "url",
+                  "url": "https://discord.gg/8yHNcBaEKy"
+                }
+              ],
+              "type": "folder"
+            }
+          ],
+          "date_added": "13264695363932168",
+          "id": "9",
+          "name": "Grouped Bookmarks",
+          "type": "folder"
+        }
+      ],
+      "date_added": "13264695363932169",
+      "id": "0",
+      "name": "Bookmarks Bar",
+      "type": "folder"
+    },
+    "other": {
+      "children": [],
+      "date_added": "13264695363932170",
+      "id": "10",
+      "name": "Other Bookmarks",
+      "type": "folder"
+    },
+    "synced": {
+      "children": [],
+      "date_added": "13264695363932171",
+      "id": "11",
+      "name": "Mobile Bookmarks",
+      "type": "folder"
+    }
+  },
+  "version": 1
+}
