@@ -1,0 +1,60 @@
+window:
+  opacity: 0.85      # półprzezroczyste tło (możesz zmienić 0.85 na inny stopień)
+  padding:
+    x: 10
+    y: 10
+  dynamic_title: true
+
+background_opacity: 0.85
+
+font:
+  normal:
+    family: "Fira Code"   # bardzo popularna czcionka programistyczna, możesz zmienić
+    style: Regular
+  size: 13.0
+  use_thin_strokes: true
+
+colors:
+  primary:
+    background: '#1E1E2E'  # ciemne, eleganckie granatowo-fioletowe tło
+    foreground: '#C8C8C8'  # jasnoszary kolor tekstu
+
+  cursor:
+    text: '#1E1E2E'
+    cursor: '#F8F8F2'
+
+  selection:
+    text: '#1E1E2E'
+    background: '#B48EAD'
+
+  normal:
+    black:   '#1E1E2E'
+    red:     '#F7768E'
+    green:   '#9ECE6A'
+    yellow:  '#E0AF68'
+    blue:    '#7AA2F7'
+    magenta: '#BB9AF7'
+    cyan:    '#7DCFFF'
+    white:   '#A9B1D6'
+
+  bright:
+    black:   '#414868'
+    red:     '#F7768E'
+    green:   '#9ECE6A'
+    yellow:  '#E0AF68'
+    blue:    '#7AA2F7'
+    magenta: '#BB9AF7'
+    cyan:    '#7DCFFF'
+    white:   '#C0CAF5'
+
+# Cursor style like Warp (vertical bar)
+cursor:
+  style: Beam
+
+# Scrollback buffer size
+scrolling:
+  history: 10000
+  multiplier: 3
+
+# Transparency fix on some platforms
+background_opacity: 0.85
