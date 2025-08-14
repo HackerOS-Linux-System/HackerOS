@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=HackerOS TV
+Comment=ogladaj na specjalnej sesji
+Exec=sway --config /etc/sway/config1
+Type=Application
+DesktopNames=HackerOS TV
