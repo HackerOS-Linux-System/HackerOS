@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Penetration Mode
+Comment=Tryb do testow penetracyjnych         
+Exec=sway --config /etc/sway/config2
+Type=Application
+DesktopNames=Penetration Mode
