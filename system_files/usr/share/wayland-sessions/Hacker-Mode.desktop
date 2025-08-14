@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Hacker Mode
+Comment=Uruchamia tryb dla graczy o nazwie Hacker Mode
+Exec=sway
+Type=Application
+DesktopNames=Hacker Mode
