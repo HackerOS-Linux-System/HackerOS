@@ -1,6 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Install Cachyos LTS Kernel
-Exec=pkexec $HOME/.hackeros/cachyos-lts.sh
-Comment=Install cachyos kernel lts for fedora :D
-X-GNOME-Autostart-enabled=true
