@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=HackerOS Update Checker
+Comment=Sprawdza dostępność aktualizacji systemowych dla HackerOS na Fedorze
+Exec=/usr/share/HackerOS/Scripts/Bin/check_updates.sh
+Icon=/usr/share/HackerOS/ICONS/update.png
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
