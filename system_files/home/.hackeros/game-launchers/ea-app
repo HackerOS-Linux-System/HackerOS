@@ -1,1 +1,3 @@
-
+/home/$USER_NAME/.legendaryos/Proton-9.27-GE/proton run \
+  --prefix /home/$USER_NAME/.legendaryos/EAApp \
+  "/home/$USER_NAME/.legendaryos/EAApp/drive_c/Program Files/Electronic Arts/EA Desktop/EA Desktop/EADesktop.exe"
