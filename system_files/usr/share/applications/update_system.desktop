@@ -1,1 +1,9 @@
-
+[Desktop Entry]
+Name=Update System
+Comment=Update HackerOS
+Exec=/usr/share/HackerOS/Scripts/Bin/update_system.sh
+Icon=/usr/share/HackerOS/ICONS/update.png
+Terminal=false
+Type=Application
+Categories=Utility;Application;
+StartupNotify=false
