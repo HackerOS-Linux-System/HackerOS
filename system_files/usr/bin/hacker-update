@@ -1,0 +1,3 @@
+!#/bin/bash
+
+sudo /usr/share/HackerOS/Scripts/Bin/hacker-update
