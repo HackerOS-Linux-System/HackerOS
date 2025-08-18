@@ -23,7 +23,7 @@ formfactor=2
 immutability=1
 lastScreen=0
 location=4
-plugin=org.kde.panel
+plugin=org.kde.plasma.panel
 wallpaperplugin=org.kde.image
 
 [Containments][2][Applets][21]
@@ -48,8 +48,8 @@ popupWidth=617
 
 [Containments][2][Applets][3][Configuration][General]
 favoritesPortedToKAstats=true
-icon=start-here
-systemFavorites=applications:/usr/share/applications/systemsettings.desktop,applications:/usr/share/applications/org.kde.dolphin.desktop,applications:/usr/share/applications/vivaldi-stable.desktop,applications:/usr/share/applications/dev.warp.Warp.desktop,applications:/usr/share/applications/update_system.desktop,applications:/usr/share/applications/org.gnome.Software.desktop
+icon=/usr/share/pixmaps/HackerOS.svg
+systemFavorites=applications:/usr/share/applications/systemsettings.desktop,applications:/usr/share/applications/org.kde.dolphin.desktop,applications:/usr/share/applications/vivaldi-stable.desktop,applications:/usr/share/applications/dev.alacritty.desktop,applications:/usr/share/applications/update_system.desktop,applications:/usr/share/applications/org.gnome.Software.desktop
 
 [Containments][2][Applets][4]
 immutability=1
@@ -59,7 +59,7 @@ plugin=org.kde.plasma.pager
 immutability=1
 plugin=org.kde.plasma.icontasks
 [Containments][2][Applets][5][Configuration][General]
-launchers=file:///usr/share/applications/systemsettings.desktop,file:///usr/share/applications/org.kde.dolphin.desktop,file:///usr/share/applications/vivaldi-stable.desktop,file:///usr/share/applications/dev.warp.Warp.desktop,file:///usr/share/applications/update_system.desktop,file:///usr/share/applications/org.gnome.Software.desktop
+launchers=file:///usr/share/applications/systemsettings.desktop,file:///usr/share/applications/org.kde.dolphin.desktop,file:///usr/share/applications/vivaldi-stable.desktop,file:///usr/share/applications/dev.alacritty.desktop,file:///usr/share/applications/update_system.desktop,file:///usr/share/applications/org.gnome.Software.desktop
 
 [Containments][2][Applets][6]
 immutability=1
@@ -68,7 +68,6 @@ plugin=org.kde.plasma.marginsseparator
 [Containments][2][Applets][7]
 immutability=1
 plugin=org.kde.plasma.systemtray
-
 [Containments][2][Applets][7][Configuration]
 PreloadWeight=55
 SystrayContainmentId=8
@@ -90,7 +89,6 @@ wallpaperplugin=org.kde.image
 [Containments][8][Applets][10]
 immutability=1
 plugin=org.kde.kscreen
-
 [Containments][8][Applets][10][Configuration]
 PreloadWeight=55
 
@@ -121,7 +119,6 @@ plugin=org.kde.plasma.manage-inputmethod
 [Containments][8][Applets][17]
 immutability=1
 plugin=org.kde.plasma.notifications
-
 [Containments][8][Applets][17][Configuration]
 PreloadWeight=55
 
@@ -136,7 +133,6 @@ plugin=org.kde.plasma.vault
 [Containments][8][Applets][20]
 immutability=1
 plugin=org.kde.plasma.volume
-
 [Containments][8][Applets][20][Configuration][General]
 migrated=true
 
