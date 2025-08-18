@@ -1,0 +1,13 @@
+#!/bin/bash
+
+cd /home/hackeros/Downloads/hackeros-official
+
+sudo lb clean --purge
+
+lb config --distribution trixie --architectures amd64
+
+sudo lb build
+
+sudo mv /home/hackeros/Downloads/hackeros-official/live-image-amd64.hybrid.iso /home/hackeros/Downloads/
+
+sudo mv /home/hackeros/Downloads/live-image-amd64.hybird.iso /home/hackeros/Downloads/hackeros.iso
