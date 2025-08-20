@@ -1,0 +1,7 @@
+PRETTY_NAME="HackerOS 2.7"
+NAME="HackerOS"
+VERSION_CODENAME=forky
+ID=hackeros
+HOME_URL="https://hackeros.webnode.page/"
+SUPPORT_URL="https://hackeros.webnode.page/mapisz-do-nas/"
+BUG_REPORT_URL="https://bugs.debian.org/"
