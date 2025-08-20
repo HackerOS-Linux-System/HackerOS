@@ -1,0 +1,43 @@
+#!/bin/bash
+# Skrypt do ustawiania jądra XanMod jako domyślnego w GRUB
+# Autor: HackerOS Team
+
+set -e
+
+# Sprawdź, czy GRUB jest zainstalowany
+if ! command -v grub-mkconfig &>/dev/null; then
+    echo "❌ Nie znaleziono GRUB. Ten skrypt działa tylko z GRUB-em."
+    exit 1
+fi
+
+# Znajdź najnowsze zainstalowane jądro xanmod
+XANMOD_KERNEL=$(ls /boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n 1)
+
+if [[ -z "$XANMOD_KERNEL" ]]; then
+    echo "❌ Nie znaleziono zainstalowanego jądra XanMod."
+    exit 1
+fi
+
+echo "✅ Wykryto jądro XanMod: $XANMOD_KERNEL"
+
+# Znajdź wpis menu GRUB odpowiadający temu jądru
+GRUB_ENTRY=$(grep -i "xanmod" /boot/grub/grub.cfg | grep "menuentry" | head -n 1 | cut -d"'" -f2)
+
+if [[ -z "$GRUB_ENTRY" ]]; then
+    echo "❌ Nie znaleziono wpisu GRUB dla jądra XanMod."
+    exit 1
+fi
+
+echo "✅ Ustawiam jako domyślny wpis GRUB: $GRUB_ENTRY"
+
+# Zapisz do /etc/default/grub
+sudo sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${GRUB_ENTRY}\"/" /etc/default/grub
+
+# Przeładuj konfigurację GRUB
+if [[ -d /boot/grub2 ]]; then
+    sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+else
+    sudo grub-mkconfig -o /boot/grub/grub.cfg
+fi
+
+echo "✅ Gotowe! Jądro XanMod będzie ładowane jako domyślne."
