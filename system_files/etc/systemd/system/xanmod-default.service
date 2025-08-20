@@ -1,0 +1,9 @@
+[Unit]
+Description=Ustawianie jądra XanMod jako domyślnego
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-xanmod-default
+
+[Install]
+WantedBy=multi-user.target
