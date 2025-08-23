@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Update Files
+Exec=/usr/share/HackerOS/Scripts/update-files.sh
+Icon=/usr/share/HackerOS/ICONS/update.png
+X-GNOME-Autostart-enabled=true
