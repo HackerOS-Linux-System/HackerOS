@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=Hacker Game
-Comment=Play hacker game
-Exec=/usr/share/HackerOS/Scripts/Bin/update_system.sh
-Icon=/usr/share/HackerOS/ICONS/update.png
-Terminal=false
-Type=Application
-Categories=Utility;Application;
-StartupNotify=false
