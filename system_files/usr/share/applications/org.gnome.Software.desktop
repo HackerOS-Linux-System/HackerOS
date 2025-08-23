@@ -1,0 +1,18 @@
+[Desktop Entry]
+Name=Software
+Comment=Add, remove or update software on this computer
+# Translators: Do NOT translate or transliterate this text (this is an icon file name)!
+Icon=/usr/share/HackerOS/ICONS/hackeros-software.png
+Exec=gnome-software %U
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;System;PackageManager;
+# Translators: Search terms to find this app. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
+Keywords=Updates;Upgrade;Sources;Repositories;Preferences;Install;Uninstall;Program;Software;App;Store;
+StartupNotify=true
+MimeType=x-scheme-handler/appstream;x-scheme-handler/apt;x-scheme-handler/snap;x-scheme-handler/flatpak+https;
+X-GNOME-UsesNotifications=true
+DBusActivatable=true
+# Translators: Do NOT translate or transliterate this text (these are enum types)!
+X-Purism-FormFactor=Workstation;Mobile;
+X-Ubuntu-Gettext-Domain=gnome-software
