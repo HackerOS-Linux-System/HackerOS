@@ -140,6 +140,7 @@ cat << "EOF"
        ══════════════════════════════════════════════════
 
 ┗┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┛
+> HackerOS based on debian trixle.
 > Secure, fast, game-ready. Updates done. You decide.
 > Welcome aboard, operator — HackerOS Team
 ┗┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┉┛
@@ -174,15 +175,15 @@ EOF
 #hacker-unpack
 alias hacker-unpack="&& hacker-unpack-cybersecurity && hacker-unpack-gaming && hacker-devtools && hacker-add-ons"
 
-alias hacker-unpack-cybersecurity="hacker-update && echo ========== Penetration Tools Install ========== && sudo hacker install nmap wireshark nikto john hydra aircrack-ng sqlmap ettercap-text-only tcpdump zmap bettercap wfuzz hashcat fail2ban rkhunter chkrootkit lynis clamav tor proxychains4 httrack sublist3r macchanger inxi htop openvas openvpn && echo ========== Install Metasploit Framework ========== && sudo snap install metasploit-framework && echo ========== Install Ghidra ========== && flatpak install flathub org.ghidra_sre.Ghidra && echo ========== Hacker-Unpack-Cybersecurity Compl3te =========="
+alias hacker-unpack-cybersecurity="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Penetration Tools Install ========== && sudo hacker install nmap wireshark nikto john hydra aircrack-ng sqlmap ettercap-text-only tcpdump zmap bettercap wfuzz hashcat fail2ban rkhunter chkrootkit lynis clamav tor proxychains4 httrack sublist3r macchanger inxi htop openvas openvpn && echo ========== Install Metasploit Framework ========== && sudo snap install metasploit-framework && echo ========== Install Ghidra ========== && flatpak install flathub org.ghidra_sre.Ghidra && echo ========== Hacker-Unpack-Cybersecurity Compl3te =========="
 
-alias hacker-unpack-gaming="hacker-update && echo ========== Install OBS STUDIO and LUTRIS ========== && sudo hacker install obs-studio lutris && echo ========== STEAM installation ========== && sudo hacker install steam && echo ========== Pika Torrent installation ========== && flatpak install flathub com.pikatorrent.PikaTorrent && echo ========== Install Heroic Games Launcher ProtonTricks and Discord ========== && flatpak install flathub net.davidotek.pupgui2 && flatpak install heroicgameslauncher protontricks discord && echo ========== Install Roblox ========== && flatpak install --user https://sober.vinegarhq.org/sober.flatpakref && echo ========== Install Roblox Studio ========== flatpak install flathub org.vinegarhq.Vinegar && echo ========== Hacker-Unpack-Gaming Complete =========="
+alias hacker-unpack-gaming="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Install OBS STUDIO and LUTRIS ========== && sudo hacker install obs-studio lutris && echo ========== STEAM installation ========== && flatpak install flathub com.valvesoftware.Steam && echo ========== Pika Torrent installation ========== && flatpak install flathub com.pikatorrent.PikaTorrent && echo ========== Install Heroic Games Launcher ProtonTricks and Discord ========== && flatpak install flathub net.davidotek.pupgui2 && flatpak install heroicgameslauncher protontricks discord && echo ========== Install Roblox ========== && flatpak install --user https://sober.vinegarhq.org/sober.flatpakref && echo ========== Install Roblox Studio ========== flatpak install flathub org.vinegarhq.Vinegar && echo ========== Hacker-Unpack-Gaming Complete =========="
 
-alias hacker-unpack-gaming-noroblox="hacker-update && echo ========== Install OBS STUDIO and LUTRIS ========== && sudo hacker install obs-studio lutris && echo ========== STEAM installation ========== && sudo apt install steam && echo ========== Pika Torrent installation ========== && flatpak install flathub com.pikatorrent.PikaTorrent && echo ========== Install Heroic Games Launcher ProtonTricks and Discord ========== && flatpak install flathub net.davidotek.pupgui2 && flatpak install heroicgameslauncher protontricks discord && echo ========== Hacker-Unpack-Gaming-NoRoblox Complete =========="
+alias hacker-unpack-gaming-noroblox="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Install OBS STUDIO and LUTRIS ========== && sudo hacker install obs-studio lutris && echo ========== STEAM installation ========== && flatpak install flathub com.valvesoftware.Steam && echo ========== Pika Torrent installation ========== && flatpak install flathub com.pikatorrent.PikaTorrent && echo ========== Install Heroic Games Launcher ProtonTricks and Discord ========== && flatpak install flathub net.davidotek.pupgui2 && flatpak install heroicgameslauncher protontricks discord && echo ========== Hacker-Unpack-Gaming-NoRoblox Complete =========="
 
-alias hacker-unpack-emulators="hacker-update && echo ========== Install PlayStation Emulator ========== flatpak install shadPS4 && echo ========== Install Emulator Nintendo ========== && flatpak install flathub io.github.ryubing.Ryujinx && echo ========== Install DOSBOX ========== && flatpak install flathub com.dosbox_x.DOSBox-X && echo ========== Install PlayStation 3 Emulator ========== && sudo snap install rpcs3-emu && echo ========== Hacker-Unpack-Emulators Complete =========="
+alias hacker-unpack-emulators="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Install PlayStation Emulator ========== flatpak install shadPS4 && echo ========== Install Emulator Nintendo ========== && flatpak install flathub io.github.ryubing.Ryujinx && echo ========== Install DOSBOX ========== && flatpak install flathub com.dosbox_x.DOSBox-X && echo ========== Install PlayStation 3 Emulator ========== && sudo snap install rpcs3-emu && echo ========== Hacker-Unpack-Emulators Complete =========="
 
-alias hacker-mode-install="echo Updating System && hacker-update && flathub install heroicgameslauncher && flatpak install --user https://sober.vinegarhq.org/sober.flatpakref && flatpak install flathub xyz.hyperplay.HyperPlay && sudo hacker install lutris steam"
+alias hacker-mode-install="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && echo Updating System && hacker-update && flathub install heroicgameslauncher && flatpak install --user https://sober.vinegarhq.org/sober.flatpakref && flatpak install flathub xyz.hyperplay.HyperPlay && sudo hacker install lutris && flatpak install flathub com.valvesoftware.Steam"
 
 #hacker install gamescope steam
 alias hacker-install-gamescope-steam="/usr/share/HackerOS/Scripts/Bin/hacker-install-gamescope-steam.sh"
@@ -194,13 +195,10 @@ alias hacker-syslog="echo ========== System Logs ========== && sudo journalctl -
 alias hacker-commands="echo ========== Commands List ==========  hacker-update hacker-unpack hacker-unpack-cybersecurity hacker-unpack-gaming hacker-unpack-gaming-noroblox hacker-syslogs hacker-unpack-emulators && echo ========== Instead of the sudo apt command you can use hacker =========="
 
 #Hacker-DevTools
-alias hacker-devtools="hacker-update && echo ========== Install Atom ========== && flatpak install flathub io.atom.Atom && echo ========== Install Dev Tools Complete =========="
+alias hacker-devtools="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Install Atom ========== && flatpak install flathub io.atom.Atom && echo ========== Install Dev Tools Complete =========="
 
 #Hacker-AddOns
-alias hacker-add-ons="hacker-update && echo ========== Install Wine ========== && sudo hacker install wine winetricks && echo ========== Install BoxBuddy and Winezgui ========== && flatpak install flathub io.github.dvlv.boxbuddyrs && flatpak install winezgui && flatpak install flathub it.mijorus.gearlever && echo ========== Install Add-Ons Complete =========="
-
-#hacker-nvidia-akmod
-alias nvidia-akmod="hacker-update && sudo hacker install nvidia-akmod"
+alias hacker-add-ons="flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo && hacker-update && echo ========== Install Wine ========== && sudo hacker install wine winetricks && echo ========== Install BoxBuddy and Winezgui ========== && flatpak install flathub io.github.dvlv.boxbuddyrs && flatpak install winezgui && flatpak install flathub it.mijorus.gearlever && echo ========== Install Add-Ons Complete =========="
 
 #hacker-unpack-g-s
 alias hacker-unpack-g-s="hacker-update && hacker-unpack-gaming && hacker-unpack-cybersecurity"
