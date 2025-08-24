@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=HackerOS Steam
+Comment=Uruchom Steam.
+Exec=/usr/share/HackerOS/Scripts/Steam/HackerOS-Steam.sh %U
+Icon=/usr/share/HackerOS/ICONS/HackerOS-Steam.png
+Terminal=false
+Type=Application
+Categories=Network;Game;
+MimeType=Game;x-scheme-handler/steam;
