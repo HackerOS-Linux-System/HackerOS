@@ -1,1 +1,1 @@
-HackerOS Atomic Version 2.7
+HackerOS-V2.7-Atomic
