@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HackerOS Search</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      background: linear-gradient(135deg, #1c2526 0%, #0d1117 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+
+    /* Particle effect with lines */
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .main-container {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 25px;
+      z-index: 10;
+      animation: fadeIn 1.2s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .search-container {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      background: linear-gradient(145deg, #2a2a2a, #363636);
+      border-radius: 50px;
+      padding: 8px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5), inset 0 2px 6px rgba(255, 255, 255, 0.1);
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .search-container:hover,
+    .search-container:focus-within {
+      box-shadow: 0 10px 30px rgba(255, 255, 255, 0.2), inset Poincaré 2px 6px rgba(255, 255, 255, 0.15);
+      transform: translateY(-3px);
+    }
+
+    .search-form {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 18px 60px 18px 25px;
+      background: transparent;
+      border: 2px solid #d0d0d0;
+      border-radius: 50px;
+      color: #ffffff;
+      font-size: 18px;
+      outline: none;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+    }
+
+    .search-input:focus {
+      border-color: #ffffff;
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.5), inset 0 0 6px rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .search-input::placeholder {
+      color: #a0a0a0;
+      font-style: italic;
+      transition: opacity 0.3s ease;
+    }
+
+    .search-input:focus::placeholder {
+      opacity: 0.6;
+    }
+
+    .search-button {
+      position: absolute;
+      right: 8px;
+      background: linear-gradient(145deg, #d0d0d0, #f0f0f0);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      padding: 12px;
+      transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .search-button:hover,
+    .search-button:focus {
+      background: #ffffff;
+      transform: scale(1.2) rotate(5deg);
+      box-shadow: 0 4px 10px rgba(255, 255, 255, 0.3);
+    }
+
+    .search-button img {
+      width: 28px;
+      height: 28px;
+      filter: invert(0.15);
+      transition: filter 0.3s ease, transform 0.3s ease;
+    }
+
+    .search-button:hover img,
+    .search-button:focus img {
+      filter: invert(0);
+      transform: rotate(-5deg);
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 10px;
+      text-align: center;
+      font-size: 14px;
+      color: #a0a0a0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'Arial', sans-serif;
+    }
+
+    .footer a {
+      color: #4a90e2;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer a:hover,
+    .footer a:focus {
+      color: #ffffff;
+    }
+
+    .footer img {
+      width: 14px;
+      height: 14px;
+      filter: invert(0.6);
+    }
+
+    @media (max-width: 600px) {
+      .search-container {
+        max-width: 95%;
+        padding: 6px;
+      }
+
+      .search-input {
+        font-size: 16px;
+        padding: 14px 50px 14px 20px;
+      }
+
+      .search-button {
+        padding: 10px;
+      }
+
+      .search-button img {
+        width: 24px;
+        height: 24px;
+      }
+
+      .footer {
+        font-size: 12px;
+      }
+
+      .footer img {
+        width: 12px;
+        height: 12px;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      .search-container {
+        max-width: 850px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas class="particles" id="particles"></canvas>
+  <div class="main-container">
+    <div class="search-container">
+      <form class="search-form" action="https://www.startpage.com/sp/search" method="GET" role="search" aria-label="Wyszukiwarka Startpage">
+        <input type="text" class="search-input" name="query" placeholder="Wyszukaj w Startpage..." required aria-label="Wprowadź frazę wyszukiwania">
+        <button type="submit" class="search-button" aria-label="Szukaj">
+          <img src="https://cdn-icons-png.flaticon.com/512/622/622669.png" alt="Ikona wyszukiwania">
+        </button>
+      </form>
+    </div>
+  </div>
+  <div class="footer">
+    <img src="https://cdn-icons-png.flaticon.com/512/622/622669.png" alt="Ikona Startpage">
+    Powered by <a href="https://www.startpage.com" target="_blank" aria-label="Strona Startpage">Startpage</a> | Search © 2025
+  </div>
+  <script>
+    // Form validation
+    const searchForm = document.querySelector('.search-form');
+    searchForm.addEventListener('submit', function(e) {
+      const query = document.querySelector('.search-input').value.trim();
+      if (!query) {
+        e.preventDefault();
+        alert('Proszę wpisać frazę wyszukiwania!');
+      }
+    });
+
+    // Placeholder animation
+    const placeholderText = "Wyszukaj w Startpage...";
+    const input = document.querySelector('.search-input');
+    let i = 0;
+    function typePlaceholder() {
+      if (i < placeholderText.length) {
+        input.placeholder = placeholderText.slice(0, i + 1);
+        i++;
+        setTimeout(typePlaceholder, 60);
+      } else {
+        setTimeout(() => {
+          i = 0;
+          input.placeholder = "";
+          typePlaceholder();
+        }, 2000);
+      }
+    }
+    typePlaceholder();
+
+    // Particle effect with lines
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const particlesArray = [];
+      const numberOfParticles = 50;
+
+      class Particle {
+        constructor() {
+          this.x = Math.random() * canvas.width;
+          this.y = Math.random() * canvas.height;
+          this.size = Math.random() * 1.5 + 0.5;
+          this.speedX = Math.random() * 0.3 - 0.15;
+          this.speedY = Math.random() * 0.3 - 0.15;
+          this.opacity = Math.random() * 0.4 + 0.2;
+        }
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+          if (this.size > 0.1) this.size -= 0.005;
+          if (this.opacity > 0.1) this.opacity -= 0.001;
+        }
+        draw() {
+          ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function initParticles() {
+        for (let i = 0; i < numberOfParticles; i++) {
+          particlesArray.push(new Particle());
+        }
+      }
+
+      function connectParticles() {
+        for (let i = 0; i < particlesArray.length; i++) {
+          for (let j = i + 1; j < particlesArray.length; j++) {
+            const dx = particlesArray[i].x - particlesArray[j].x;
+            const dy = particlesArray[i].y - particlesArray[j].y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 80) {
+              ctx.strokeStyle = `rgba(255, 255, 255, ${(1 - distance / 80) * 0.5})`;
+              ctx.lineWidth = 0.4;
+              ctx.beginPath();
+              ctx.moveTo(particlesArray[i].x, particlesArray[i].y);
+              ctx.lineTo(particlesArray[j].x, particlesArray[j].y);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      function animateParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < particlesArray.length; i++) {
+          particlesArray[i].update();
+          particlesArray[i].draw();
+          if (particlesArray[i].size <= 0.1 || particlesArray[i].opacity <= 0.1) {
+            particlesArray.splice(i, 1);
+            particlesArray.push(new Particle());
+            i--;
+          }
+        }
+        connectParticles();
+        requestAnimationFrame(animateParticles);
+      }
+
+      initParticles();
+      animateParticles();
+
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+    } else {
+      console.warn('Canvas not supported in this browser.');
+    }
+
+    // Search bar mouse movement reaction
+    const searchContainer = document.querySelector('.search-container');
+    document.addEventListener('mousemove', (e) => {
+      const rect = searchContainer.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const maxTilt = 4;
+      const tiltX = ((centerY - e.clientY) / centerY) * maxTilt;
+      const tiltY = ((centerX - e.clientX) / centerX) * maxTilt;
+      searchContainer.style.transform = `translateY(-3px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+    });
+
+    document.addEventListener('mouseout', () => {
+      searchContainer.style.transform = 'translateY(0) rotateX(0deg) rotateY(0deg)';
+    });
+
+    // Keyboard accessibility
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && document.activeElement !== input) {
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>
