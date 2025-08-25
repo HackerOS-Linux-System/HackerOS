@@ -24,8 +24,8 @@ if [ "$(printf '%s\n' "$latest_version" "$current_version" | sort -V | tail -n 1
     echo "New version $latest_version available. Current version: $current_version"
 
     # Clone the update repository
-    rm -rf /tmp/HackerOS-Updates
-    git clone https://github.com/HackerOS-Linux-System/HackerOS-Updates.git /tmp/HackerOS-Updates
+    rm -rf /tmp/HackerOS
+    git clone https://github.com/HackerOS-Linux-System/HackerOS.git /tmp/HackerOS
 
     # Check if clone was successful
     if [ $? -ne 0 ]; then
@@ -34,8 +34,8 @@ if [ "$(printf '%s\n' "$latest_version" "$current_version" | sort -V | tail -n 1
     }
 
     # Make unpack.sh executable
-    if [ -f /tmp/HackerOS-Updates/unpack.sh ]; then
-        sudo chmod a+x /tmp/HackerOS-Updates/unpack.sh
+    if [ -f /tmp/HackerOS/update-repos/unpack.sh ]; then
+        sudo chmod a+x /tmp/HackerOS/update-repos/unpack.sh
 
         # Run the unpack script
         /tmp/HackerOS-Updates/unpack.sh
