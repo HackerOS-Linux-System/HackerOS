@@ -1,0 +1,98 @@
+#!/bin/bash
+# HackerOS - Report Bug Tool (rozbudowana wersja)
+# Autor: VoidArc Studio (Michał)
+
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+REPORT_DIR="/tmp/bugreport_$TIMESTAMP"
+ARCHIVE="/tmp/bugreport_$TIMESTAMP.tar.gz"
+
+mkdir -p "$REPORT_DIR"
+
+echo "[*] Generowanie raportu systemowego dla HackerOS..."
+echo "[*] Katalog roboczy: $REPORT_DIR"
+
+### Podstawowe informacje o systemie
+echo "[*] Zbieranie podstawowych informacji..."
+{
+    echo "=== System ==="
+    uname -a
+    lsb_release -a 2>/dev/null || cat /etc/os-release
+    echo "=== Kernel ==="
+    uname -r
+    echo "=== Data ==="
+    date
+    echo "=== Użytkownik ==="
+    whoami
+    echo "=== Hostname ==="
+    hostnamectl
+} > "$REPORT_DIR/system_info.txt"
+
+### Sprzęt
+echo "[*] Zbieranie informacji o sprzęcie..."
+lscpu > "$REPORT_DIR/cpu.txt"
+lsmem 2>/dev/null || free -h > "$REPORT_DIR/mem.txt"
+lsblk -o NAME,FSTYPE,SIZE,MOUNTPOINT > "$REPORT_DIR/disks.txt"
+df -h > "$REPORT_DIR/filesystems.txt"
+lspci -nnk > "$REPORT_DIR/pci.txt"
+lsusb > "$REPORT_DIR/usb.txt"
+dmidecode -t system > "$REPORT_DIR/bios.txt" 2>/dev/null || echo "brak dmidecode"
+
+### Procesy i usługi
+echo "[*] Procesy i usługi..."
+ps aux --sort=-%mem > "$REPORT_DIR/processes.txt"
+systemctl list-units --failed > "$REPORT_DIR/services_failed.txt"
+systemctl list-units > "$REPORT_DIR/services.txt"
+systemctl status > "$REPORT_DIR/systemctl_status.txt"
+
+### Logi systemowe
+echo "[*] Logi systemowe..."
+journalctl -xe > "$REPORT_DIR/journal_full.txt" 2>/dev/null
+journalctl -b > "$REPORT_DIR/journal_boot.txt" 2>/dev/null
+dmesg > "$REPORT_DIR/dmesg_full.txt" 2>/dev/null
+
+### Sieć
+echo "[*] Sieć..."
+ip a > "$REPORT_DIR/network_ip.txt"
+ip r > "$REPORT_DIR/network_routes.txt"
+ss -tulpn > "$REPORT_DIR/network_ports.txt"
+ping -c 4 8.8.8.8 > "$REPORT_DIR/ping.txt" 2>/dev/null
+
+### Pakiety
+echo "[*] Lista pakietów..."
+if command -v hacker.sh &>/dev/null; then
+    hacker.sh list > "$REPORT_DIR/hackeros-packages.txt"
+fi
+dpkg -l > "$REPORT_DIR/debian-packages.txt"
+flatpak list > "$REPORT_DIR/flatpak-packages.txt" 2>/dev/null
+snap list > "$REPORT_DIR/snap-packages.txt" 2>/dev/null
+
+### Konfiguracje krytyczne
+echo "[*] Konfiguracje..."
+cp /etc/fstab "$REPORT_DIR/fstab.txt" 2>/dev/null
+cp /etc/hosts "$REPORT_DIR/hosts.txt" 2>/dev/null
+cp /etc/resolv.conf "$REPORT_DIR/resolv.conf.txt" 2>/dev/null
+cp /etc/apt/sources.list "$REPORT_DIR/sources.list.txt" 2>/dev/null
+cp -r /etc/apt/sources.list.d "$REPORT_DIR/apt_sources.d" 2>/dev/null
+
+### Informacje o kernelu i sterownikach
+echo "[*] Kernel i sterowniki..."
+lsmod > "$REPORT_DIR/kernel_modules.txt"
+dmesg | grep -i "nvidia\|amd\|intel" > "$REPORT_DIR/gpu_drivers.txt" 2>/dev/null
+
+### Środowisko graficzne
+echo "[*] Informacje o środowisku graficznym..."
+{
+    echo "XDG_SESSION_TYPE=$XDG_SESSION_TYPE"
+    echo "DESKTOP_SESSION=$DESKTOP_SESSION"
+    echo "XDG_CURRENT_DESKTOP=$XDG_CURRENT_DESKTOP"
+    echo "DISPLAY=$DISPLAY"
+} > "$REPORT_DIR/gui_env.txt"
+
+### Archiwizacja
+echo "[*] Tworzenie archiwum..."
+tar -czf "$ARCHIVE" -C "$REPORT_DIR" .
+
+echo "[✔] Raport gotowy: $ARCHIVE"
+echo "    Katalog z raportem: $REPORT_DIR"
+echo ""
+echo "Dołącz plik do zgłoszenia na GitHub/SourceForge."
