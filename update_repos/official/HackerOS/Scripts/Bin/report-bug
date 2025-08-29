@@ -1,6 +1,6 @@
 #!/bin/bash
-# HackerOS - Report Bug Tool (rozbudowana wersja)
-# Autor: VoidArc Studio (Michał)
+# HackerOS - Report Bug Tool
+# Autor: HackerOS Team
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT_DIR="/tmp/bugreport_$TIMESTAMP"
