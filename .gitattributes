@@ -1,0 +1,27 @@
+*.json linguist-detectable=true
+*.json linguist-documentation=false
+*.json linguist-language=JSON
+
+*.yaml linguist-detectable=true
+*.yaml linguist-documentation=false
+*.yaml linguist-language=YAML
+
+*.yml linguist-detectable=true
+*.yml linguist-documentation=false
+*.yml linguist-language=YAML
+
+*.desktop linguist-detectable=true
+*.desktop linguist-documentation=false
+*.desktop linguist-language=INI
+
+*.conf linguist-detectable=true
+*.conf linguist-documentation=false
+*.conf linguist-language=YAML
+
+*.hk linguist-detectable=true
+*.hk linguist-documentation=false
+*.hk linguist-language=HK
+
+*.hl linguist-detectable=true
+*.hl linguist-documentation=false
+*.hl linguist-language=Hacker-Lang
