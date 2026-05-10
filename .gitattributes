@@ -29,3 +29,7 @@
 *.hook.chroot linguist-detectable=true
 *.hook.chroot linguist-documentation=false
 *.hook.chroot linguist-language=SHELL
+
+*.hook.chroot linguist-detectable=true
+*.hook.chroot linguist-documentation=false
+*.list.chroot linguist-language=TEXT
