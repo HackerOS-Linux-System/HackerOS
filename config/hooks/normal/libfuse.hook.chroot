@@ -1,0 +1,3 @@
+wget http://ftp.pl.debian.org/debian/pool/main/f/fuse/libfuse2_2.9.9-6+b1_am64.deb
+sudo dpkg -i libfuse2_2.9.9-6+b1_amd64.deb
+sudo apt --fix-broken install
