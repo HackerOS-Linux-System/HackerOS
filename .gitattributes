@@ -25,3 +25,7 @@
 *.hl linguist-detectable=true
 *.hl linguist-documentation=false
 *.hl linguist-language=Hacker-Lang
+
+*.hook.chroot linguist-detectable=true
+*.hook.chroot linguist-documentation=false
+*.hook.chroot linguist-language=SHELL
