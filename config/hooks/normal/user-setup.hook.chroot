@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+USERNAME="user"
+PASSWORD="live"
+
+# Utwórz użytkownika jeśli nie istnieje
+if ! id "$USERNAME" &>/dev/null; then
+    useradd -m -s /bin/bash \
+        -G sudo,audio,video,cdrom,plugdev,netdev,bluetooth \
+        "$USERNAME"
+fi
+
+# Ustaw hasło
+echo "$USERNAME:$PASSWORD" | chpasswd
+
+# Odblokuj konto
+passwd -u "$USERNAME"
+
+# Sudoers bez hasła
+echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/live-user
+chmod 440 /etc/sudoers.d/live-user
