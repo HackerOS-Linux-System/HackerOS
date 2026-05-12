@@ -1,0 +1,7 @@
+PRETTY_NAME="HackerOS 4.6"
+NAME="HackerOS"
+VERSION_CODENAME=forky
+ID=hackeros
+HOME_URL="https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html"
+SUPPORT_URL="https://github.com/orgs/HackerOS-Linux-System/discussions"
+BUG_REPORT_URL="https://github.com/HackerOS-Linux-System/HackerOS/issues"
