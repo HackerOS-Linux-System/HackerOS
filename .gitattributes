@@ -33,3 +33,11 @@
 *.list.chroot linguist-detectable=true
 *.list.chroot linguist-documentation=false
 *.list.chroot linguist-language=TEXT
+
+os-release linguist-detectable=true
+os-release linguist-documentation=false
+os-release linguist-language=TEXT
+
+hostname linguist-detectable=true
+hostname linguist-documentation=false
+hostname linguist-language=TEXT
