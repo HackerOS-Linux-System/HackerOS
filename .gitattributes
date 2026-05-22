@@ -36,7 +36,7 @@
 
 os-release linguist-detectable=true
 os-release linguist-documentation=false
-os-release linguist-language=TEXT
+os-release linguist-language=SHELL
 
 hostname linguist-detectable=true
 hostname linguist-documentation=false
