@@ -1,0 +1,31 @@
+#!/usr/bin/bash
+
+# Jeśli działa w subshellu Midnight Commander – wyjdź
+[[ -n "$MC_SID" ]] && exit 0
+
+TEMPLATE="/usr/lib/HackerOS/motd/template/HackerOS.md"
+THEME="/usr/lib/HackerOS/motd/theme/default.json"
+TIP_FILE=$(ls /usr/lib/HackerOS/motd/*.md 2>/dev/null | shuf -n 1)
+
+[[ ! -f "$TIP_FILE" ]] && exit 0
+
+# Pobranie wariantu dystrybucji
+DISTRO_VARIANT=$(grep '^Variant=' /etc/xdg/kcm-about-distrorc 2>/dev/null | cut -d '=' -f2-)
+
+# Tworzymy tymczasowy plik z podstawionym variant
+TMP=$(mktemp)
+sed "s/%VARIANT%/$DISTRO_VARIANT/g" "$TEMPLATE" > "$TMP"
+
+# Wstawiamy TIP w miejscu %TIP%
+# sed:
+#   - znajdź linijkę zawierającą %TIP%
+#   - wczytaj zawartość pliku TIP_FILE
+#   - usuń linijkę z markerem
+sed -e "/%TIP%/ {
+    r $TIP_FILE
+    d
+}" "$TMP" \
+| tr '~' '\n' \
+| /usr/bin/glow -s "$THEME" -w 78 -
+
+rm -f "$TMP"
