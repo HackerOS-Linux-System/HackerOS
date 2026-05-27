@@ -1,1 +1,13 @@
-
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install HackerOS
+GenericName=Calamares Installer
+Exec=calamares-install-debian
+Comment=Calamares — Installer for HackerOS Live
+Keywords=calamares;system;install;debian;installer
+Icon=/usr/share/HackerOS/ICONS/HackerOS-Download-Icon.png
+Terminal=false
+Categories=Qt;System;
+StartupWMClass=calamares
+StartupNotify=True
