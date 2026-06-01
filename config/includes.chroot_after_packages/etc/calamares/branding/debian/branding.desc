@@ -1,0 +1,39 @@
+---
+componentName:   debian
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 800px,580px
+windowPlacement: center
+
+strings:
+    productName:         HackerOS
+    shortProductName:    HackerOS
+    version:             4
+    shortVersion:        4
+    versionedName:       HackerOS 4.8
+    shortVersionedName:  HackerOS 4.8
+    bootloaderEntryName: HackerOS
+    productUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
+    supportUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/write-to-us.html
+    knownIssuesUrl:      https://github.com/HackerOS-Linux-System/HackerOS-Website/issues
+    releaseNotesUrl:     https://hackeros-linux-system.github.io/HackerOS-Website/releases.html
+    donateUrl:           https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
+
+sidebar: widget
+navigation: widget
+
+images:
+    productLogo:         "debian-logo.png"
+    productIcon:         "debian-logo.png"
+    productWelcome:      "welcome.png"
+
+slideshow:               "show.qml"
+
+style:
+   SidebarBackground:    "#26475b"
+   SidebarText:          "#FFFFFF"
+   SidebarTextCurrent:   "#fbfbfb"
+   SidebarBackgroundCurrent: "#265370"
+
+slideshowAPI: 2
