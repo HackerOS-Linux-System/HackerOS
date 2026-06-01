@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/hacker-lang">
+    <comment>Hacker Lang Source Code</comment>
+    <glob pattern="*.hl"/>
+  </mime-type>
+</mime-info>
