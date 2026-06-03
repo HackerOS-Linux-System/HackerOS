@@ -1,12 +1,43 @@
 #!/bin/bash
-clear
+set -e
 
+restore_backup() {
+    if [ -f /usr/lib/live/build/binary.backup ]; then
+        echo "==> Przywracam oryginalny plik..."
+        sudo cp /usr/lib/live/build/binary.backup /usr/lib/live/build/binary
+        sudo rm /usr/lib/live/build/binary.backup
+    fi
+}
+trap restore_backup EXIT
+
+echo "==> Backup /usr/lib/live/build/binary..."
+sudo cp /usr/lib/live/build/binary /usr/lib/live/build/binary.backup
+
+echo "==> Patchowanie..."
+sudo python3 -c "
+content = open('/usr/lib/live/build/binary').read()
+old = 'lb binary_syslinux \"\${@}\"'
+new = '''# Kopiowanie jadra xanmod do binary/live/
+mkdir -p binary/live
+VMLINUZ=\$(ls chroot/boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)
+INITRD=\$(ls chroot/boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)
+if [ -n \"\$VMLINUZ\" ]; then cp \"\$VMLINUZ\" \"binary/live/\$(basename \$VMLINUZ)\"; fi
+if [ -n \"\$INITRD\" ]; then cp \"\$INITRD\" \"binary/live/\$(basename \$INITRD)\"; fi
+lb binary_syslinux \"\${@}\"'''
+open('/usr/lib/live/build/binary', 'w').write(content.replace(old, new))
+"
+
+echo "==> Weryfikacja patcha:"
+grep -n -A8 "Kopiowanie jadra" /usr/lib/live/build/binary
+
+clear
 cd /home/michal-hackeros/Pobrane/hackeros-official/
 
-# Czyścimy poprzednie buildy
 sudo lb clean --purge
 
-# Konfiguracja live-build z firmware i repo non-free-firmware
+# Usun stare hooki binary zeby nie przeszkadzaly
+rm -f config/hooks/normal/0020-xanmod-binary.hook.binary
+
 lb config \
   --distribution forky \
   --architectures amd64 \
@@ -15,13 +46,53 @@ lb config \
   --linux-flavours "none" \
   --linux-packages "none"
 
+sudo rm -rf \
+  config/includes.chroot_after_packages/usr/bin/chker \
+  config/includes.chroot_after_packages/usr/bin/hackeros-steam
+
 echo 'LB_ADD_ARCHITECTURES="i386"' >> config/chroot
 
-# Budowa obrazu
+mkdir -p config/hooks/normal
+cat > config/hooks/normal/0010-xanmod-symlink.hook.chroot << 'EOF'
+#!/bin/sh
+set -e
+
+VMLINUZ=$(ls /boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)
+if [ -z "$VMLINUZ" ]; then
+    echo "E: Brak jadra xanmod!"
+    exit 1
+fi
+
+KVER=$(basename "$VMLINUZ" | sed 's/vmlinuz-//')
+
+if [ ! -f "/boot/initrd.img-${KVER}" ]; then
+    echo "I: Generowanie initrd dla ${KVER}..."
+    update-initramfs -c -k "${KVER}"
+fi
+
+INITRD=$(ls /boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)
+
+if [ -z "$INITRD" ]; then
+    echo "E: Brak initrd xanmod!"
+    exit 1
+fi
+
+ln -sf "$VMLINUZ" /boot/vmlinuz
+ln -sf "$VMLINUZ" /vmlinuz
+ln -sf "$INITRD" /boot/initrd.img
+ln -sf "$INITRD" /initrd.img
+
+echo "I: Jadro: $VMLINUZ"
+echo "I: Initrd: $INITRD"
+EOF
+chmod +x config/hooks/normal/0010-xanmod-symlink.hook.chroot
+
 sudo lb build
 
-# Przenosimy gotowe ISO
-sudo mv /home/michal-hackeros/Pobrane/hackeros-official/live-image-amd64.hybrid.iso /home/michal-hackeros/Pobrane/
+sudo mv /home/michal-hackeros/Pobrane/hackeros-official/live-image-amd64.hybrid.iso \
+        /home/michal-hackeros/Pobrane/
 
-# Czyszczenie po buildzie
 sudo lb clean --purge
+
+echo ""
+echo "==> Gotowe! ISO jest w /home/michal-hackeros/Pobrane/"
