@@ -15,8 +15,8 @@ strings:
     shortVersionedName:  HackerOS 4.8
     bootloaderEntryName: HackerOS
     productUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
-    supportUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/write-to-us.html
-    knownIssuesUrl:      https://github.com/HackerOS-Linux-System/HackerOS-Website/issues
+    supportUrl:          https://github.com/HackerOS-Linux-System/HackerOS/discussions
+    knownIssuesUrl:      https://github.com/HackerOS-Linux-System/HackerOS/issues
     releaseNotesUrl:     https://hackeros-linux-system.github.io/HackerOS-Website/releases.html
     donateUrl:           https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
 
