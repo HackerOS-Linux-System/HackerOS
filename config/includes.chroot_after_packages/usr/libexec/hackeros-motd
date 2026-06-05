@@ -1,31 +1,52 @@
-#!/usr/bin/bash
+#!/usr/bin/hl
 
-# Jeśli działa w subshellu Midnight Commander – wyjdź
-[[ -n "$MC_SID" ]] && exit 0
+/// motd — HackerOS Message of the Day
 
-TEMPLATE="/usr/lib/HackerOS/motd/template/HackerOS.md"
-THEME="/usr/lib/HackerOS/motd/theme/default.json"
-TIP_FILE=$(ls /usr/lib/HackerOS/motd/*.md 2>/dev/null | shuf -n 1)
+using <gen 2>
 
-[[ ! -f "$TIP_FILE" ]] && exit 0
+;; MC — wyjdz jesli subshell Midnight Commander
+> bash -c 'test -n "${MC_SID:-}"'
+? ok
+    > exit 0
+done
 
-# Pobranie wariantu dystrybucji
-DISTRO_VARIANT=$(grep '^Variant=' /etc/xdg/kcm-about-distrorc 2>/dev/null | cut -d '=' -f2-)
+% MOTD_DIR  = /usr/lib/HackerOS/motd
+% TEMPLATE  = /usr/lib/HackerOS/motd/template/HackerOS.md
+% THEME     = /usr/lib/HackerOS/motd/theme/default.json
 
-# Tworzymy tymczasowy plik z podstawionym variant
-TMP=$(mktemp)
-sed "s/%VARIANT%/$DISTRO_VARIANT/g" "$TEMPLATE" > "$TMP"
+::isdir @MOTD_DIR
+? err
+    > exit 0
+done
 
-# Wstawiamy TIP w miejscu %TIP%
-# sed:
-#   - znajdź linijkę zawierającą %TIP%
-#   - wczytaj zawartość pliku TIP_FILE
-#   - usuń linijkę z markerem
-sed -e "/%TIP%/ {
-    r $TIP_FILE
-    d
-}" "$TMP" \
-| tr '~' '\n' \
-| /usr/bin/glow -s "$THEME" -w 78 -
+;; Wybierz losowy tip
+>> bash -c "ls /usr/lib/HackerOS/motd/*.md 2>/dev/null | shuf -n 1" |> @TIP_FILE
 
-rm -f "$TMP"
+> test -z "@TIP_FILE"
+? ok
+    > exit 0
+done
+::exists @TIP_FILE
+? err
+    > exit 0
+done
+
+;; Wariant dystrybucji
+>> bash -c "grep '^Variant=' /etc/xdg/kcm-about-distrorc 2>/dev/null | cut -d= -f2-" |> @DISTRO_VARIANT
+
+;; Plik tymczasowy z podstawionym VARIANT
+>> mktemp |> @TMP_FILE
+
+::exists @TEMPLATE
+? ok
+    >> bash -c "sed \"s/%VARIANT%/@DISTRO_VARIANT/g\" '@TEMPLATE' > '@TMP_FILE'"
+done
+? err
+    >> bash -c "touch '@TMP_FILE'"
+done
+
+;; Pipeline: wstaw TIP, zamien tyldy na newline, wyswietl przez glow
+;; Dwa oddzielne -e zamiast bloku { } — unikamy { } w lekserze HL
+>> bash -c "sed -e '/%TIP%/r @TIP_FILE' -e '/%TIP%/d' '@TMP_FILE' | tr '~' '\n' | /usr/bin/glow -s '@THEME' -w 78 -"
+
+> rm -f @TMP_FILE
