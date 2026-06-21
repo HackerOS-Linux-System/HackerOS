@@ -13,7 +13,7 @@ haruna
 flatpak
 snapd
 python3.13-venv
-pip
+lua5.5
 curl
 wget
 git
