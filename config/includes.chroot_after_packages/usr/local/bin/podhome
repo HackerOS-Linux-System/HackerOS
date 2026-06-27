@@ -1,0 +1,25 @@
+#!/usr/bin/env hl
+using <gen 2>
+
+/// podhome — uruchamia kontener Podman jako root z mapowaniem HOME
+/// Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
+
+# <main/colors>
+
+;; Sprawdzenie argumentów
+?~ @argc < 1
+    ~> @COLOR_RED Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]@COLOR_RESET
+    ~> Przykład: podhome fedora
+    ~>         podhome ubuntu /bin/zsh
+    exit 1
+done
+
+% image: str = @arg1
+
+;; Budujemy komendę
+> podman run -it --rm \
+    --user root \
+    --userns=keep-id \
+    -v "$HOME:$HOME:Z" \
+    -w "$HOME" \
+    @image "${@:-/bin/bash}"   ;; reszta argumentów po obrazie
