@@ -1,69 +1,43 @@
 #!/usr/bin/hl
+/// bit — Hacker Lang Package Manager (gen 2)
 
 using <gen 2>
 
-;; Wymagane narzedzia: curl, git, jq (musza byc zainstalowane)
+// curl
+// git
 
-;; Inline ANSI — bez importu # <main/colors> (eliminuje wolny import na starcie)
-% _C_RST = \033[0m
-% _C_GRN = \033[32m
-% _C_RED = \033[31m
-% _C_YEL = \033[33m
-% _C_CYN = \033[36m
-% _C_MAG = \033[35m
-% _C_DIM = \033[2m
-% _C_BLD = \033[1m
-
+;; ── Stałe ─────────────────────────────────────────────────────────────────────
 % BIT_REPO_RAW  = https://raw.githubusercontent.com/bit-io/repository/main/bit-repo/repo-list.json
 % BIT_REPO_URL  = https://github.com/bit-io/repository
-% BIT_HOME      = /usr/lib/HackerOS/Hacker-Lang/bit
-% BIT_CACHE_DIR = .cache
-% BIT_REPO_FILE = .cache/repo-list.json
-% BIT_CMD       = @arg0
-% BIT_PKG       = @arg1
+% BIT_HOME      = ~/.hackeros/hacker-lang/libs
+% BIT_CACHE_DIR = ~/.hackeros/hacker-lang/cache
+% BIT_META_DIR  = ~/.hackeros/hacker-lang/meta
+% BIT_REPO_FILE = ~/.hackeros/hacker-lang/cache/repo-list.json
+% BIT_LOCK_FILE = ~/.hackeros/hacker-lang/meta/bit.lock
 
-;; ── Progress bar ──────────────────────────────────────────────────────────────
-: pb_draw def
-    ;; Uproszczony progress bar przez python3
-    >> python3 -c "import sys; pct=@_pb_pct; fill=pct*20//100; empty=20-fill; bar='['+ '-'*max(0,fill-1)+('>' if fill>0 else '')+'.'*empty+']'; print(f'\r\033[36m{bar}\033[0m \033[33m[{pct}%]\033[0m',end='',flush=True)"
+;; ── Init ──────────────────────────────────────────────────────────────────────
+: bit_init_dirs def
+    > mkdir -p @BIT_HOME
+    > mkdir -p @BIT_CACHE_DIR
+    > mkdir -p @BIT_META_DIR
 done
 
-: pb_done def
-    ~>
-done
-
-;; ── Naglowek ──────────────────────────────────────────────────────────────────
+;; ── Header ────────────────────────────────────────────────────────────────────
 : bit_header def
     ::hr 50
-    ~> @_C_MAG bit@_C_RST — Hacker Lang Package Manager @_C_DIM(gen 2)@_C_RST
+    ::bold bit — Hacker Lang Package Manager
     ::hr 50
 done
 
-;; ── Cache ──────────────────────────────────────────────────────────────────────
-: bit_ensure_cache def
-    ::isdir @BIT_CACHE_DIR
-    ? err
-        > mkdir -p @BIT_CACHE_DIR
-    done
-done
-
-;; ── Repo-list ─────────────────────────────────────────────────────────────────
+;; ── Repo list ─────────────────────────────────────────────────────────────────
 : bit_fetch_repo def
-    ~> @_C_CYN Pobieranie listy pakietow...@_C_RST
-    % _pb_pct = 0
-    -- pb_draw
-    % _pb_pct = 40
-    -- pb_draw
-    -- bit_ensure_cache
+    ~> Pobieranie listy pakietow...
+    -- bit_init_dirs
     > curl -fsSL -o @BIT_REPO_FILE @BIT_REPO_RAW
     ? ok
-        % _pb_pct = 100
-        -- pb_draw
-        -- pb_done
         ::green Lista pakietow pobrana.
     done
     ? err
-        -- pb_done
         ::red Blad pobierania listy pakietow!
         > exit 1
     done
@@ -76,257 +50,258 @@ done
     done
 done
 
-;; ── bit run ───────────────────────────────────────────────────────────────────
-: bit_run def
-    ::nl
-    ~> @_C_CYN[bit run]@_C_RST Uruchamianie projektu...
-    ::nl
+;; ── Lock file helpers (przez jq/python3 jako fallback) ───────────────────────
 
-    ;; KROK 1 — Znajdz plik wejsciowy
-    ~> @_C_DIM[1/4] Szukanie pliku wejsciowego...@_C_RST
-
-    % _entry_file =
-    % _entry_type = hl
-
-    ;; Sprawdz bit.hk
-    ::exists bit.hk
+: lock_get def
+    ;; % _lock_pkg = nazwa && -- lock_get → @_lock_val (pole: commit/path/type/url/...)
+    ::exists @BIT_LOCK_FILE
     ? ok
-        >> bash -c "awk '/^\[project\]/{f=1;next} f&&/^\[/{f=0} f&&/-> *entry/{match(\$0,/=>[[:space:]]*/);v=substr(\$0,RSTART+RLENGTH);gsub(/[[:space:]]/,\"\",v);print v;exit}' bit.hk" |> @_entry_file
-    done
-
-    ;; Jesli bit.hk nie dal wyniku — szukaj typowych lokalizacji
-    > test -z "@_entry_file"
-    ? ok
-        % _hl_locs = "source-code/main.hl src/main.hl cmd/main.hl main.hl app/main.hl"
-        @ _loc in @_hl_locs
-            ::exists @_loc
-            ? ok
-                > test -z "@_entry_file"
-                ? ok
-                    % _entry_file = @_loc
-                done
-            done
-        done
-    done
-
-    ;; Sprawdz Rust jesli nadal puste
-    > test -z "@_entry_file"
-    ? ok
-        % _rust_locs = "source-code/Cargo.toml src/Cargo.toml Cargo.toml"
-        @ _loc in @_rust_locs
-            ::exists @_loc
-            ? ok
-                > test -z "@_entry_file"
-                ? ok
-                    % _entry_file = @_loc
-                    % _entry_type = rust
-                done
-            done
-        done
-    done
-
-    > test -z "@_entry_file"
-    ? ok
-        ::red Nie znaleziono pliku wejsciowego!
-        ~>
-        ~> Sprawdzone lokalizacje:
-        ~>   source-code/main.hl  src/main.hl  cmd/main.hl  main.hl
-        ~>   source-code/Cargo.toml  Cargo.toml
-        ~>
-        ~> Stwórz @_C_CYN bit.hk@_C_RST z polem entry lub jeden z powyzszych plików.
-        > exit 1
-    done
-
-    ~> @_C_GRN Znaleziono:@_C_RST @_entry_file
-
-    ;; KROK 2 — Check tylko dla .hl
-    >> bash -c "case '@_entry_file' in *.hl) echo yes;; *) echo no;; esac" |> @_is_hl
-    > test "@_is_hl" = "yes"
-    ? ok
-        ~> @_C_DIM[2/4] Sprawdzanie poprawnosci...@_C_RST
-        > hl check @_entry_file
-        ? err
-            ::red Bledy w kodzie — popraw przed uruchomieniem.
-            > exit 1
-        done
-        ::green Kod poprawny.
-    done
-
-    ;; KROK 3 — Cache
-    ~> @_C_DIM[3/4] Przygotowanie .cache...@_C_RST
-    -- bit_ensure_cache
-
-    ;; Zaleznosci z bit.hk
-    ::exists bit.hk
-    ? ok
-        >> bash -c "awk '/^\[dependencies\]/{f=1;next} f&&/^\[/{f=0} f&&/-> /{match(\$0,/->[[:space:]]*/);v=substr(\$0,RSTART+RLENGTH);gsub(/[[:space:]].*/,\"\",v);if(v!=\"\")print v}' bit.hk" |> @_deps_list
-        > test -n "@_deps_list"
-        ? ok
-            @ _dep in @_deps_list
-                > test -n "@_dep"
-                ? ok
-                    ::isdir @BIT_HOME/@_dep
-                    ? err
-                        ~> @_C_DIM  instaluje: @_dep@_C_RST
-                        % BIT_PKG = @_dep
-                        -- bit_install_silent
-                    done
-                done
-            done
-        done
-    done
-    ::green .cache gotowy.
-
-    ;; KROK 4 — Uruchom
-    ~> @_C_DIM[4/4] Uruchamianie...@_C_RST
-    ::hr 40
-
-    > test "@_is_hl" = "yes"
-    ? ok
-        > hl run @_entry_file
+        >> jq -r ".\"@_lock_pkg\".\"@_lock_field\" // empty" @BIT_LOCK_FILE |> @_lock_val
     done
     ? err
-        >> bash -c "dirname '@_entry_file'" |> @_cargo_dir
-        >> bash -c "cd '@_cargo_dir' && cargo run --release 2>&1"
+        % _lock_val =
     done
 done
 
-;; ── bit install (cichy) ───────────────────────────────────────────────────────
-: bit_install_silent def
-    -- bit_ensure_repo
-    >> jq -r ".\"@BIT_PKG\".url // empty" @BIT_REPO_FILE |> @_si_url
-    > test -z "@_si_url"
+: lock_has def
+    ;; % _lock_pkg = nazwa && -- lock_has → exit 0 jeśli zainstalowany
+    ::exists @BIT_LOCK_FILE
     ? ok
-        ::yellow Pakiet '@BIT_PKG' nie w repo — pomijam.
+        >> jq -e ".\"@_lock_pkg\"" @BIT_LOCK_FILE > /dev/null 2>&1
     done
     ? err
-        % _si_dest = @BIT_HOME/@BIT_PKG
-        >> mkdir -p @_si_dest
-        >> git clone --depth=1 @_si_url @_si_dest
+        > exit 1
     done
 done
 
-;; ── bit install ───────────────────────────────────────────────────────────────
-: bit_install def
-    -- bit_ensure_cache
-    -- bit_ensure_repo
-
-    > test -z "@BIT_PKG"
-    ? ok
-        ::red Podaj nazwe pakietu: bit install <nazwa>
-        > exit 1
-    done
-
-    ~> @_C_CYN Instalowanie:@_C_RST @BIT_PKG
-
-    % _pb_pct = 5
-    -- pb_draw
-
-    >> jq -r ".\"@BIT_PKG\".url  // empty" @BIT_REPO_FILE |> @_bit_url
-    >> jq -r ".\"@BIT_PKG\".type // empty" @BIT_REPO_FILE |> @_bit_type
-
-    % _pb_pct = 20
-    -- pb_draw
-
-    > test -z "@_bit_url"
-    ? ok
-        -- pb_done
-        ::red Pakiet '@BIT_PKG' nie znaleziony w repozytorium.
-        ~> Lista: @_C_CYN bit list@_C_RST
-        > exit 1
-    done
-
-    % _bit_dest = @BIT_HOME/@BIT_PKG
-    >> mkdir -p @_bit_dest
-
-    % _pb_pct = 35
-    -- pb_draw
-
-    ~> Klonowanie: @_bit_url
-    >> git clone --depth=1 @_bit_url @_bit_dest
+: lock_set def
+    ;; Zapisuje wpis do bit.lock przez jq — jednoliniowe, bez multiline bash
+    ::exists @BIT_LOCK_FILE
     ? err
-        -- pb_done
-        ::red Blad klonowania: @_bit_url
+        >> bash -c "printf '{}' > '@BIT_LOCK_FILE'"
+    done
+    >> date -Iseconds |> @_ls_now
+    >> bash -c "TMP=$(mktemp); jq --arg p '@_lock_pkg' --arg c '@_lock_commit' --arg d '@_lock_date' --arg cs '@_lock_checksum' --arg t '@_lock_type' --arg u '@_lock_url' --arg pa '@_lock_path' --arg n '@_ls_now' '.[$p]={version:$c,commit:$c,commit_date:$d,checksum:$cs,type:$t,url:$u,path:$pa,installed_at:$n}' '@BIT_LOCK_FILE' > $TMP && mv $TMP '@BIT_LOCK_FILE'"
+done
+
+: lock_del def
+    ;; % _lock_pkg = nazwa && -- lock_del
+    ::exists @BIT_LOCK_FILE
+    ? ok
+        >> bash -c "TMP=$(mktemp); jq 'del(.[\"@_lock_pkg\"])' '@BIT_LOCK_FILE' > $TMP && mv $TMP '@BIT_LOCK_FILE'"
+    done
+done
+
+;; ── Checksum katalogu ─────────────────────────────────────────────────────────
+: dir_checksum def
+    ;; % _cs_dir = sciezka && -- dir_checksum → @_cs_hash
+    >> bash -c "find '@_cs_dir' -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1" |> @_cs_hash
+done
+
+;; ── Git helpers ───────────────────────────────────────────────────────────────
+: get_commit def
+    ;; % _gc_dir = sciezka && -- get_commit → @_gc_commit
+    >> git -C "@_gc_dir" rev-parse --short HEAD 2>/dev/null |> @_gc_commit
+    > test -z "@_gc_commit"
+    ? ok
+        % _gc_commit = unknown
+    done
+done
+
+: get_commit_date def
+    ;; % _gc_dir = sciezka && -- get_commit_date → @_gcd_date
+    >> git -C "@_gc_dir" log -1 --format=%ci 2>/dev/null |> @_gcd_raw
+    >> printf '%s\n' "@_gcd_raw" | cut -c1-10 |> @_gcd_date
+done
+
+;; ── Symlink current ───────────────────────────────────────────────────────────
+: set_current def
+    ;; % _sc_pkg = nazwa && % _sc_commit = hash && -- set_current
+    % _sc_link = @BIT_HOME/@_sc_pkg/current
+    > rm -f @_sc_link
+    >> bash -c "cd '@BIT_HOME/@_sc_pkg' && ln -s '@_sc_commit' current"
+done
+
+: resolve_current def
+    ;; % _rc_pkg = nazwa && -- resolve_current → @_rc_path (lub pusty)
+    % _rc_link = @BIT_HOME/@_rc_pkg/current
+    ::exists @_rc_link
+    ? ok
+        >> readlink -f @_rc_link |> @_rc_path
+        ::isdir @_rc_path
+        ? err
+            % _rc_path =
+        done
+    done
+    ? err
+        % _rc_path =
+    done
+done
+
+;; ── Szukaj URL pakietu w repo ─────────────────────────────────────────────────
+: repo_get_url def
+    ;; % _rgu_pkg = nazwa && -- repo_get_url → @_rgu_url @_rgu_type
+    >> jq -r ".\"@_rgu_pkg\".url // empty" @BIT_REPO_FILE |> @_rgu_url
+    >> jq -r ".\"@_rgu_pkg\".type // \"hl\"" @BIT_REPO_FILE |> @_rgu_type
+done
+
+;; ── bit install (core) ────────────────────────────────────────────────────────
+: _do_install def
+    ;; % _di_pkg % _di_url % _di_type && -- _do_install
+    -- bit_init_dirs
+
+    % _di_tmp = @BIT_CACHE_DIR/_tmp_@_di_pkg
+    > rm -rf @_di_tmp
+
+    ~> Klonowanie: @_di_url
+    > git clone --depth=1 @_di_url @_di_tmp
+    ? err
+        ::red Blad klonowania: @_di_url
         > exit 1
     done
 
-    % _pb_pct = 70
-    -- pb_draw
+    % _gc_dir = @_di_tmp
+    -- get_commit
+    % _di_commit = @_gc_commit
 
-    ? switch @_bit_type
-    | hl
-        ::exists @_bit_dest/source-code/main.hl
-        ? ok
-            ~> @_C_DIM[bit] HL: source-code/main.hl gotowe@_C_RST
-        done
-        ? err
-            ::yellow [bit] Brak source-code/main.hl — sprawdz pakiet
-        done
+    % _gcd_dir = @_di_tmp
+    -- get_commit_date
+    % _di_date = @_gcd_date
 
-    | rust
+    % _di_dest = @BIT_HOME/@_di_pkg/@_di_commit
+
+    ;; Już zainstalowany w tej wersji?
+    ::isdir @_di_dest
+    ? ok
+        ::yellow Wersja @_di_commit juz zainstalowana.
+        > rm -rf @_di_tmp
+        % _sc_pkg    = @_di_pkg
+        % _sc_commit = @_di_commit
+        -- set_current
+        > exit 0
+    done
+
+    > mkdir -p @BIT_HOME/@_di_pkg
+    > mv @_di_tmp @_di_dest
+
+    ;; Checksum
+    ~> Obliczanie checksum...
+    % _cs_dir = @_di_dest
+    -- dir_checksum
+    % _di_checksum = @_cs_hash
+
+    ;; Build dla Rust
+    > test "@_di_type" = "rust"
+    ? ok
         ::which cargo
-        ? ok
-            ::isdir @_bit_dest/source-code
-            ? ok
-                ~> @_C_CYN[bit] Budowanie Rust...@_C_RST
-                >> bash -c "cd '@_bit_dest/source-code' && cargo build --release 2>&1"
-                ? ok
-                    >> bash -c "find '@_bit_dest/source-code/target/release' -maxdepth 1 -type f -executable ! -name '*.d' ! -name '*.rlib' -exec cp {} '@_bit_dest/' \;"
-                    ::green Zbudowano.
-                done
-                ? err
-                    ::red Blad budowania Rust.
-                    > exit 1
-                done
-            done
-        done
         ? err
             ::red cargo nie znalezione: https://rustup.rs
             > exit 1
         done
-
-    | *
-        ::yellow [bit] Typ '@_bit_type' — pakiet sklonowany.
+        ::cyan Budowanie Rust...
+        >> bash -c "cd '@_di_dest' && cargo build --release 2>&1"
+        ? ok
+            ::green Zbudowano.
+        done
+        ? err
+            ::red Blad budowania Rust.
+            > exit 1
+        done
     done
 
-    % _pb_pct = 100
-    -- pb_draw
-    -- pb_done
-    ::green Pakiet '@BIT_PKG' zainstalowany!
-    ~> Lokalizacja: @_C_DIM@_bit_dest@_C_RST
+    ;; Symlink current
+    % _sc_pkg    = @_di_pkg
+    % _sc_commit = @_di_commit
+    -- set_current
+
+    ;; Zapisz w lock
+    % _lock_pkg      = @_di_pkg
+    % _lock_commit   = @_di_commit
+    % _lock_date     = @_di_date
+    % _lock_checksum = @_di_checksum
+    % _lock_type     = @_di_type
+    % _lock_url      = @_di_url
+    % _lock_path     = @_di_dest
+    -- lock_set
+done
+
+;; ── bit install ───────────────────────────────────────────────────────────────
+: bit_install def
+    ;; % _pkg = nazwa && -- bit_install
+    -- bit_ensure_repo
+    ::cyan Instalowanie: @_pkg
+    ::hr 40
+
+    % _rgu_pkg = @_pkg
+    -- repo_get_url
+
+    > test -z "@_rgu_url"
+    ? ok
+        ::red Pakiet '@_pkg' nie znaleziony w repozytorium.
+        ~> Lista: bit search all
+        > exit 1
+    done
+
+    % _di_pkg  = @_pkg
+    % _di_url  = @_rgu_url
+    % _di_type = @_rgu_type
+    -- _do_install
+
+    ;; Pokaż wynik
+    ::hr 40
+    ::green Zainstalowano: @_pkg
+    % _lock_pkg   = @_pkg
+    % _lock_field = commit
+    -- lock_get
+    ~> Commit:   @_lock_val
+    % _lock_field = commit_date
+    -- lock_get
+    ~> Data:     @_lock_val
+    % _lock_field = path
+    -- lock_get
+    ~> Lokalizacja: @_lock_val
+    ::hr 40
 done
 
 ;; ── bit remove ────────────────────────────────────────────────────────────────
 : bit_remove def
-    > test -z "@BIT_PKG"
+    ;; % _pkg = nazwa && -- bit_remove
+    ::yellow Usuwanie: @_pkg
+    % _rc_pkg = @_pkg
+    -- resolve_current
+
+    > rm -rf @BIT_HOME/@_pkg
     ? ok
-        ::red Podaj nazwe pakietu: bit remove <nazwa>
-        > exit 1
+        ::green Katalog pakietu usuniety.
     done
-    % _bit_dest = @BIT_HOME/@BIT_PKG
-    ::isdir @_bit_dest
-    ? err
-        ::red Pakiet '@BIT_PKG' nie jest zainstalowany.
-        > exit 1
-    done
-    ~> @_C_YEL Usuwanie:@_C_RST @BIT_PKG
-    % _pb_pct = 50
-    -- pb_draw
-    >> rm -rf @_bit_dest
-    % _pb_pct = 100
-    -- pb_draw
-    -- pb_done
-    ::green Pakiet '@BIT_PKG' usuniety.
+
+    % _lock_pkg = @_pkg
+    -- lock_del
+    ::green Pakiet '@_pkg' usuniety.
 done
 
 ;; ── bit list ──────────────────────────────────────────────────────────────────
 : bit_list def
     -- bit_ensure_repo
     ::hr 50
-    ~> @_C_CYN Dostepne pakiety bit:@_C_RST
+    ::cyan Dostepne pakiety bit:
     ::hr 50
     ::nl
-    >> jq -r 'to_entries[] | "\(.key)|\(.value.type // "?")"' @BIT_REPO_FILE | while IFS='|' read pkg typ; do printf "  \033[32m%-24s\033[0m \033[90m[%s]\033[0m\n" "$pkg" "$typ"; done
+    >> jq -r 'to_entries[] | "\(.key)|\(.value.type // "?")"' @BIT_REPO_FILE | sort |> @_list_raw
+    @ _line in @_list_raw
+        >> printf '%s\n' "@_line" | cut -d'|' -f1 |> @_pkg_name
+        >> printf '%s\n' "@_line" | cut -d'|' -f2 |> @_pkg_type
+        % _lock_pkg = @_pkg_name
+        -- lock_has
+        ? ok
+            % _lock_field = commit
+            -- lock_get
+            ~>   @_pkg_name [@_pkg_type] — instalowany @ @_lock_val
+        done
+        ? err
+            ~>   @_pkg_name [@_pkg_type]
+        done
+    done
     ::nl
     ::hr 50
     ~> Repozytorium: @BIT_REPO_URL
@@ -334,81 +309,351 @@ done
 
 ;; ── bit update ────────────────────────────────────────────────────────────────
 : bit_update def
-    ~> @_C_CYN Aktualizacja listy pakietow...@_C_RST
+    ~> Aktualizacja listy pakietow...
     > rm -f @BIT_REPO_FILE
     -- bit_fetch_repo
 done
 
+;; ── bit upgrade ───────────────────────────────────────────────────────────────
+: bit_upgrade def
+    ;; % _pkg = nazwa (lub pusty = wszystkie) && -- bit_upgrade
+    -- bit_ensure_repo
+    > test -z "@_pkg"
+    ? ok
+        ;; Upgrade wszystkich
+        ::exists @BIT_LOCK_FILE
+        ? ok
+            >> jq -r 'keys[]' @BIT_LOCK_FILE |> @_all_pkgs
+            @ _up_pkg in @_all_pkgs
+                ::cyan Upgrade: @_up_pkg
+                % _lock_pkg   = @_up_pkg
+                % _lock_field = url
+                -- lock_get
+                % _up_url = @_lock_val
+                % _lock_field = type
+                -- lock_get
+                % _up_type = @_lock_val
+                % _di_pkg  = @_up_pkg
+                % _di_url  = @_up_url
+                % _di_type = @_up_type
+                -- _do_install
+            done
+        done
+        ? err
+            ::yellow Brak zainstalowanych pakietow.
+        done
+    done
+    ? err
+        ::cyan Upgrade: @_pkg
+        % _lock_pkg   = @_pkg
+        % _lock_field = url
+        -- lock_get
+        % _rgu_url = @_lock_val
+        % _lock_field = type
+        -- lock_get
+        % _rgu_type = @_lock_val
+        % _di_pkg  = @_pkg
+        % _di_url  = @_rgu_url
+        % _di_type = @_rgu_type
+        -- _do_install
+    done
+done
+
 ;; ── bit info ──────────────────────────────────────────────────────────────────
 : bit_info def
+    ;; % _pkg = nazwa && -- bit_info
     -- bit_ensure_repo
-    > test -z "@BIT_PKG"
+    ::hr 44
+    ~> Pakiet: @_pkg
+    ::hr 44
+
+    >> jq -r ".\"@_pkg\".url // \"(brak)\"" @BIT_REPO_FILE |> @_info_url
+    >> jq -r ".\"@_pkg\".type // \"(brak)\"" @BIT_REPO_FILE |> @_info_type
+    ~> URL:  @_info_url
+    ~> Typ:  @_info_type
+
+    % _lock_pkg = @_pkg
+    -- lock_has
     ? ok
-        ::red Podaj nazwe pakietu: bit info <nazwa>
-        > exit 1
+        ::nl
+        ::green Zainstalowany:
+        % _lock_field = commit
+        -- lock_get
+        ~>   Commit:       @_lock_val
+        % _lock_field = commit_date
+        -- lock_get
+        ~>   Data commit:  @_lock_val
+        % _lock_field = installed_at
+        -- lock_get
+        ~>   Zainstalowano: @_lock_val
+        % _lock_field = path
+        -- lock_get
+        ~>   Sciezka:      @_lock_val
+
+        ;; Weryfikacja checksum
+        % _lock_field = checksum
+        -- lock_get
+        % _stored_cs = @_lock_val
+        % _rc_pkg = @_pkg
+        -- resolve_current
+        > test -n "@_rc_path"
+        ? ok
+            ~> Weryfikacja checksum...
+            % _cs_dir = @_rc_path
+            -- dir_checksum
+            > test "@_cs_hash" = "@_stored_cs"
+            ? ok
+                ::green Checksum OK
+            done
+            ? err
+                ::red Checksum NIEZGODNY — plik mogl zostac zmodyfikowany!
+            done
+        done
     done
-    ::hr 40
-    ~> @_C_CYN Pakiet:@_C_RST @BIT_PKG
-    ::hr 40
-    >> jq ".\"@BIT_PKG\"" @BIT_REPO_FILE
-    ::hr 40
+    ? err
+        ::yellow Nie zainstalowany.
+    done
+    ::hr 44
+done
+
+;; ── bit verify ────────────────────────────────────────────────────────────────
+: bit_verify def
+    ;; % _pkg = nazwa (lub pusty = wszystkie) && -- bit_verify
+    ::hr 50
+    ::cyan Weryfikacja checksum:
+    ::hr 50
+    ::exists @BIT_LOCK_FILE
+    ? ok
+        > test -z "@_pkg"
+        ? ok
+            >> jq -r 'keys[]' @BIT_LOCK_FILE |> @_ver_pkgs
+        done
+        ? err
+            % _ver_pkgs = @_pkg
+        done
+        @ _vp in @_ver_pkgs
+            % _lock_pkg   = @_vp
+            % _lock_field = checksum
+            -- lock_get
+            % _stored = @_lock_val
+            % _rc_pkg = @_vp
+            -- resolve_current
+            > test -n "@_rc_path"
+            ? ok
+                % _cs_dir = @_rc_path
+                -- dir_checksum
+                > test "@_cs_hash" = "@_stored"
+                ? ok
+                    % _lock_field = commit
+                    -- lock_get
+                    ~>   OK  @_vp @ @_lock_val
+                done
+                ? err
+                    ::red   FAIL  @_vp — NIEZGODNY
+                done
+            done
+            ? err
+                ::yellow   BRAK  @_vp — brak katalogu
+            done
+        done
+    done
+    ? err
+        ::yellow Brak zainstalowanych pakietow.
+    done
+    ::hr 50
 done
 
 ;; ── bit clean ─────────────────────────────────────────────────────────────────
 : bit_clean def
-    ::isdir @BIT_CACHE_DIR
+    ::exists @BIT_LOCK_FILE
     ? ok
-        ~> @_C_YEL Czyszczenie .cache...@_C_RST
-        > rm -rf @BIT_CACHE_DIR
-        ::green .cache usuniete.
+        >> jq -r 'to_entries[] | "\(.key)|\(.value.commit)"' @BIT_LOCK_FILE |> @_clean_list
+        @ _cl in @_clean_list
+            >> printf '%s\n' "@_cl" | cut -d'|' -f1 |> @_cl_pkg
+            >> printf '%s\n' "@_cl" | cut -d'|' -f2 |> @_cl_commit
+            >> bash -c "ls '@BIT_HOME/@_cl_pkg/' 2>/dev/null | grep -v '^current$' | grep -v '^@_cl_commit$'" |> @_old_versions
+            @ _ov in @_old_versions
+                > test -n "@_ov"
+                ? ok
+                    ~> Usuwam stara wersje: @_cl_pkg @ @_ov
+                    > rm -rf @BIT_HOME/@_cl_pkg/@_ov
+                done
+            done
+        done
+    done
+    ;; Usun tymczasowe katalogi cache
+    >> bash -c "ls '@BIT_CACHE_DIR/' 2>/dev/null | grep '^_tmp_'" |> @_tmp_list
+    @ _tmp in @_tmp_list
+        > test -n "@_tmp"
+        ? ok
+            > rm -rf @BIT_CACHE_DIR/@_tmp
+        done
+    done
+    ::green Wyczyszczono.
+done
+
+;; ── bit search ────────────────────────────────────────────────────────────────
+: bit_search def
+    ;; % _query = fraza (lub "all") && -- bit_search
+    -- bit_ensure_repo
+    > test "@_query" = "all"
+    ? ok
+        -- bit_list
+        > exit 0
+    done
+    ::hr 50
+    ~> Wyniki dla: @_query
+    ::hr 50
+    >> jq -r 'to_entries[] | "\(.key)|\(.value.type // "?")"' @BIT_REPO_FILE | sort |> @_slist
+    % _found = 0
+    @ _sl in @_slist
+        >> printf '%s\n' "@_sl" | cut -d'|' -f1 |> @_sn
+        >> printf '%s\n' "@_sl" | grep -i "@_query" > /dev/null 2>&1
+        ? ok
+            >> printf '%s\n' "@_sl" | cut -d'|' -f2 |> @_st
+            ~>   @_sn [@_st]
+            $(@_found + 1) -> @_found
+        done
+    done
+    > test "@_found" = "0"
+    ? ok
+        ::yellow Brak wynikow dla '@_query'.
+        ~> Wszystkie pakiety: bit search all
+    done
+    ::hr 50
+done
+
+;; ── bit installed ─────────────────────────────────────────────────────────────
+: bit_installed def
+    ::hr 50
+    ::cyan Zainstalowane biblioteki:
+    ::hr 50
+    ::exists @BIT_LOCK_FILE
+    ? ok
+        >> jq -r 'to_entries[] | "\(.key)|\(.value.commit)|\(.value.type)|\(.value.commit_date)"' @BIT_LOCK_FILE | sort |> @_inst_list
+        > test -z "@_inst_list"
+        ? ok
+            ::yellow Brak zainstalowanych pakietow.
+        done
+        @ _il in @_inst_list
+            >> printf '%s\n' "@_il" | cut -d'|' -f1 |> @_in
+            >> printf '%s\n' "@_il" | cut -d'|' -f2 |> @_ic
+            >> printf '%s\n' "@_il" | cut -d'|' -f3 |> @_it
+            >> printf '%s\n' "@_il" | cut -d'|' -f4 |> @_id
+            ~>   @_in @ @_ic  [@_it]  @_id
+        done
     done
     ? err
-        ~> .cache jest puste lub nie istnieje.
+        ::yellow Brak zainstalowanych pakietow.
+        ~>   Zainstaluj: bit install <nazwa>
     done
+    ::hr 50
 done
 
 ;; ── bit workspace ─────────────────────────────────────────────────────────────
 : bit_workspace def
     ::nl
-    ~> @_C_CYN[bit workspace]@_C_RST
-    ::nl
-
+    ::cyan [bit workspace]
+    ::hr 44
     ::exists bit.hk
     ? ok
         ::green bit.hk:
         ::hr 30
-        > cat bit.hk
+        ::read bit.hk
         ::hr 30
     done
     ? err
         ::yellow Brak bit.hk
-        ~>
-        ~> Przyklad bit.hk:
-        ~> [project]
-        ~> -> name    => MojProjekt
-        ~> -> version => 1.0.0
-        ~> -> entry   => source-code/main.hl
-        ~> -> type    => hl
-        ~>
-        ~> [dependencies]
-        ~> -> tui
+    done
+    ::nl
+    -- bit_installed
+    ::nl
+    ~> Katalog libs:  @BIT_HOME
+    ~> Lock file:     @BIT_LOCK_FILE
+done
+
+;; ── bit run ───────────────────────────────────────────────────────────────────
+: bit_run def
+    ::nl
+    ::cyan [bit run] Uruchamianie projektu...
+    ::nl
+
+    % _entry = ""
+    % _entry_type = hl
+
+    ;; Szukaj z bit.hk
+    ::exists bit.hk
+    ? ok
+        >> grep -A20 '\[project\]' bit.hk | grep '-> *entry' | sed 's/.*=>[[:space:]]*//' | tr -d ' ' | head -1 |> @_entry
     done
 
-    ::nl
-    ::isdir @BIT_HOME
+    ;; Szukaj pliku wejściowego HL
+    > test -z "@_entry"
     ? ok
-        ~> @_C_DIM Zainstalowane (@BIT_HOME):@_C_RST
-        >> bash -c "ls -1 '@BIT_HOME' 2>/dev/null | while read p; do printf '  \033[32m%s\033[0m\n' \"\$p\"; done"
+        @ _loc in source-code/main.hl src/main.hl cmd/main.hl main.hl app/main.hl
+            ::exists @_loc
+            ? ok
+                % _entry = @_loc
+            done
+        done
     done
 
-    ::nl
-    ::isdir @BIT_CACHE_DIR
+    ;; Szukaj Cargo.toml
+    > test -z "@_entry"
     ? ok
-        ~> @_C_DIM Cache (.cache/):@_C_RST
-        >> du -sh @BIT_CACHE_DIR
+        @ _cloc in source-code/Cargo.toml src/Cargo.toml Cargo.toml
+            ::exists @_cloc
+            ? ok
+                % _entry = @_cloc
+                % _entry_type = rust
+            done
+        done
+    done
+
+    > test -z "@_entry"
+    ? ok
+        ::red Nie znaleziono pliku wejsciowego!
+        ~>
+        ~> Sprawdzone lokalizacje:
+        ~>   source-code/main.hl  src/main.hl  main.hl
+        ~>   source-code/Cargo.toml  Cargo.toml
+        > exit 1
+    done
+
+    ::green Znaleziono: @_entry
+
+    ;; Sprawdz zaleznosci z bit.hk
+    ::exists bit.hk
+    ? ok
+        >> grep -A50 '\[dependencies\]' bit.hk | grep '-> ' | sed 's/.*-> *//' | awk '{print $1}' | grep -v '^$' |> @_deps
+        @ _dep in @_deps
+            > test -n "@_dep"
+            ? ok
+                % _lock_pkg = @_dep
+                -- lock_has
+                ? err
+                    ~> Instalowanie zaleznosci: @_dep
+                    % _rgu_pkg = @_dep
+                    -- repo_get_url
+                    % _di_pkg  = @_dep
+                    % _di_url  = @_rgu_url
+                    % _di_type = @_rgu_type
+                    -- _do_install
+                done
+            done
+        done
+    done
+
+    ::green Zaleznosci OK.
+    ::hr 40
+
+    > test "@_entry_type" = "rust"
+    ? ok
+        >> dirname @_entry |> @_cargo_dir
+        >> bash -c "cd '@_cargo_dir' && cargo run --release"
     done
     ? err
-        ~> @_C_DIM Cache: pusty@_C_RST
+        > hl run @_entry
     done
 done
 
@@ -416,56 +661,93 @@ done
 : bit_help def
     -- bit_header
     ::nl
-    ~> @_C_BLD Uruchamianie projektu:@_C_RST
-    ~>   @_C_GRN bit run@_C_RST           — znajdz + check + cache + uruchom
+    ::bold Uruchamianie projektu:
+    ~>   bit run                    — znajdz + check + zaleznosci + uruchom
     ::nl
-    ~> @_C_BLD Manager pakietow:@_C_RST
-    ~>   @_C_GRN bit install @_C_CYN<nazwa>@_C_RST  — zainstaluj pakiet
-    ~>   @_C_GRN bit remove  @_C_CYN<nazwa>@_C_RST  — usun pakiet
-    ~>   @_C_GRN bit list@_C_RST           — lista pakietow
-    ~>   @_C_GRN bit update@_C_RST          — aktualizuj liste
-    ~>   @_C_GRN bit info    @_C_CYN<nazwa>@_C_RST  — info o pakiecie
-    ~>   @_C_GRN bit clean@_C_RST           — usun .cache
+    ::bold Manager pakietow:
+    ~>   bit install <nazwa> ...    — zainstaluj pakiet(y)
+    ~>   bit remove  <nazwa> ...    — usun pakiet(y)
+    ~>   bit upgrade [nazwa]        — upgrade pakietu (lub wszystkich)
+    ~>   bit verify  [nazwa]        — weryfikuj checksum
+    ~>   bit list                   — lista pakietow z repo
+    ~>   bit installed              — zainstalowane biblioteki
+    ~>   bit search  <fraza>        — szukaj pakietu
+    ~>   bit search  all            — pokaz wszystkie pakiety
+    ~>   bit update                 — aktualizuj liste repo
+    ~>   bit info    <nazwa>        — info + checksum o pakiecie
+    ~>   bit clean                  — usun stare wersje i cache
     ::nl
-    ~> @_C_BLD Projekt:@_C_RST
-    ~>   @_C_GRN bit workspace@_C_RST      — info o projekcie i bit.hk
+    ::bold Projekt:
+    ~>   bit workspace              — info o projekcie i zainstalowanych libs
     ::nl
-    ~> @_C_BLD bit.hk:@_C_RST
-    ~>   [project]
-    ~>   -> name    => MojProjekt
-    ~>   -> version => 1.0.0
-    ~>   -> entry   => source-code/main.hl
-    ~>   -> type    => hl
-    ~>
-    ~>   [dependencies]
-    ~>   -> tui
-    ::nl
-    ~> @_C_BLD Lokalizacje entry (bit run szuka w kolejnosci):@_C_RST
-    ~>   source-code/main.hl  src/main.hl  cmd/main.hl  main.hl  app/main.hl
-    ~>   source-code/Cargo.toml  @_C_DIM(Rust)@_C_RST
+    ::bold Lokalizacje:
+    ~>   Libs:  ~/.hackeros/hacker-lang/libs/<pkg>/<commit>/
+    ~>   Meta:  ~/.hackeros/hacker-lang/meta/bit.lock
+    ~>   Cache: ~/.hackeros/hacker-lang/cache/
     ::nl
     ~> Repozytorium: @BIT_REPO_URL
 done
 
-;; ═════════════════════════════════════════════════════════════════════════════
-;; MAIN DISPATCH — bez zadnych wywolan sieciowych przed switchem
-;; ═════════════════════════════════════════════════════════════════════════════
+;; ── MAIN ──────────────────────────────────────────────────────────────────────
 
-? switch @BIT_CMD
+% _cmd  = @arg0
+% _pkg1 = @arg1
+
+> test -z "@_cmd"
+? ok
+    -- bit_help
+    > exit 0
+done
+
+? switch @_cmd
 | run
     -- bit_run
 | install
-    -- bit_install
+    > test -z "@_pkg1"
+    ? ok
+        ::red Podaj nazwe pakietu: bit install <nazwa>
+        > exit 1
+    done
+    % _i = 0
+    ?~ @_i < @argc
+        % _pkg = @arg@_i
+        -- bit_install
+        $(@_i + 1) -> @_i
+    done
 | remove
-    -- bit_remove
+    > test -z "@_pkg1"
+    ? ok
+        ::red Podaj nazwe pakietu: bit remove <nazwa>
+        > exit 1
+    done
+    % _i = 0
+    ?~ @_i < @argc
+        % _pkg = @arg@_i
+        -- bit_remove
+        $(@_i + 1) -> @_i
+    done
+| upgrade
+    % _pkg = @_pkg1
+    -- bit_upgrade
+| verify
+    % _pkg = @_pkg1
+    -- bit_verify
 | list
-    -- bit_ensure_cache
     -- bit_list
+| installed
+    -- bit_installed
+| search
+    % _query = @_pkg1
+    -- bit_search
 | update
-    -- bit_ensure_cache
     -- bit_update
 | info
-    -- bit_ensure_cache
+    > test -z "@_pkg1"
+    ? ok
+        ::red Podaj nazwe pakietu: bit info <nazwa>
+        > exit 1
+    done
+    % _pkg = @_pkg1
     -- bit_info
 | clean
     -- bit_clean
@@ -474,5 +756,11 @@ done
 | help
     -- bit_help
 | *
-    -- bit_help
+    -- bit_header
+    ::nl
+    ::red Nieznana komenda: @_cmd
+    ::nl
+    ~> Dostepne komendy: run install remove upgrade verify list installed search update info clean workspace help
+    ~> Szczegoly: bit help
+    > exit 1
 done
