@@ -5,7 +5,7 @@ What is HackerOS? HackerOS is a Polish Linux distribution based on Debian testin
 HackerOS has 10 editions:
 
 - Official Editon - The regular edition and the most important one for HackerOS.
-- Cybersecurity Edition - The edition is mostly the same as the official one but aimed at cybersecurity. It has a stable Debian.
+- Cybersecurity Edition - This edition is aimed at cybersecurity, primarily for the Red Team. It features a dedicated kernel (HackerOS Kernel) optimized for cybersecurity, a XEN hypervisor, a proprietary Cybersecurity Mode graphical environment, proprietary cybersecurity tools, and, in the future, a proprietary GhostFS file system. Based on Debian Stable.
 - NVIDIA Edition - Identical version to the official one but with Nvidia drivers installed. (frozen edition)
 - Hydra Edition - has everything the same as HackerOS official edition but additionally has a special look partially inspired by the look of Garuda Linux.
 - Gnome Edition - The official version is identical but with the Gnome graphical environment installed.
