@@ -1,1 +1,46 @@
+#!/usr/bin/env bash
 
+# podhome — uruchamia kontener Podman z mapowaniem HOME (persistent)
+# Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
+
+# Kolory
+COLOR_RED='\033[0;31m'
+COLOR_RESET='\033[0m'
+
+# Sprawdzenie argumentów
+if [ $# -lt 1 ]; then
+    echo -e "${COLOR_RED}Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]${COLOR_RESET}"
+    echo "Przykład: podhome fedora"
+    echo "         podhome ubuntu /bin/zsh"
+    exit 1
+fi
+
+IMAGE="$1"
+shift
+
+# Domyślna komenda
+COMMAND="${@:-/bin/bash}"
+
+# Nazwa kontenera — dzięki temu zmiany się nie kasują
+CONTAINER_NAME="podhome-$(echo "$IMAGE" | tr '/:' '-')"
+
+# Sprawdzamy czy kontener już istnieje
+if ! podman container exists "$CONTAINER_NAME" 2>/dev/null; then
+    echo "Tworzę nowy kontener: $CONTAINER_NAME"
+    podman create \
+        --name "$CONTAINER_NAME" \
+        --user root \
+        --userns=keep-id \
+        -v "$HOME:$HOME:Z" \
+        --hostname "$(hostname)-pod" \
+        "$IMAGE" /bin/bash
+fi
+
+# Uruchamiamy/attachujemy się do kontenera
+echo -e "${COLOR_RESET}Wchodzę do kontenera: ${CONTAINER_NAME}"
+podman start "$CONTAINER_NAME" >/dev/null 2>&1
+
+# Exec — uruchamiamy komendę jako root (ale bez --rm)
+podman exec -it \
+    "$CONTAINER_NAME" \
+    "$COMMAND"
