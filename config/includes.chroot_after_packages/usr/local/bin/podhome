@@ -11,7 +11,7 @@ COLOR_RESET='\033[0m'
 if [ $# -lt 1 ]; then
     echo -e "${COLOR_RED}Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]${COLOR_RESET}"
     echo "Przykład: podhome fedora"
-    echo "         podhome ubuntu /bin/zsh"
+    echo "          podhome ubuntu /bin/zsh"
     exit 1
 fi
 
@@ -27,20 +27,21 @@ CONTAINER_NAME="podhome-$(echo "$IMAGE" | tr '/:' '-')"
 # Sprawdzamy czy kontener już istnieje
 if ! podman container exists "$CONTAINER_NAME" 2>/dev/null; then
     echo "Tworzę nowy kontener: $CONTAINER_NAME"
+
+    # USUNIĘTO: --user root i --userns=keep-id, które gryzły się z montowaniem $HOME
+    # DODANO: --interactive --tty, aby kontener poprawnie trzymał proces sleep
     podman create \
         --name "$CONTAINER_NAME" \
-        --user root \
-        --userns=keep-id \
         -v "$HOME:$HOME:Z" \
-        --hostname "$(hostname)-pod" \
-        "$IMAGE" /bin/bash
+        "$IMAGE" sleep infinity
 fi
 
-# Uruchamiamy/attachujemy się do kontenera
+# Uruchamiamy kontener (bez uciszania błędów, żeby było widać co się dzieje w razie wpadki)
 echo -e "${COLOR_RESET}Wchodzę do kontenera: ${CONTAINER_NAME}"
-podman start "$CONTAINER_NAME" >/dev/null 2>&1
+podman start "$CONTAINER_NAME" >/dev/null
 
-# Exec — uruchamiamy komendę jako root (ale bez --rm)
+# Exec — wchodzimy do kontenera.
+# Jeśli chcesz być rootem, podman exec domyślnie wchodzi jako root, chyba że obraz wymusza inaczej.
 podman exec -it \
     "$CONTAINER_NAME" \
     "$COMMAND"
