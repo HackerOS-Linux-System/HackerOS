@@ -1,0 +1,21 @@
+#!/bin/bash
+
+
+
+sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky
+
+# Czyścimy poprzednie buildy
+sudo lb clean --purge
+
+# Konfiguracja live-build z firmware i repo non-free-firmware
+lb config \
+  --distribution forky \
+  --architectures amd64 \
+  --apt-options "--allow-unauthenticated --yes" \
+  --firmware-chroot true
+
+# Budowa obrazu
+sudo lb build
+
+# Czyszczenie po buildzie
+sudo lb clean --purge
