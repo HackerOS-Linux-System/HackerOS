@@ -2,8 +2,6 @@
 # sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky ! make debian tesing trixie to debian forky -> testing
 clear
 
-sudo rm -rf /home/michal-hackeros/Pobrane/hackeros-official/config/packages.chroot/vivaldi-stable_7.8.3925.56-1_amd64.deb
-
 cd /home/michal-hackeros/Pobrane/hackeros-official/
 
 # Czyścimy poprzednie buildy
@@ -18,9 +16,6 @@ lb config \
 
 # Budowa obrazu
 sudo lb build
-
-# Przenosimy gotowe ISO
-sudo mv /home/michal-hackeros/Pobrane/hackeros-official/live-image-amd64.hybrid.iso /home/michal-hackeros/Pobrane/
 
 # Czyszczenie po buildzie
 sudo lb clean --purge
