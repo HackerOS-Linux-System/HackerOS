@@ -1,0 +1,43 @@
+[Unit]
+Description=HackerOS Game Mode (Gamescope + Steam Big Picture) v0.2
+After=systemd-user-sessions.service network.target sound.target systemd-logind.service
+# NIE ma Conflicts=sddm.service — SDDM zostaje na tty2
+Wants=systemd-logind.service
+
+[Service]
+Type=simple
+
+# start-with-recovery = auto-restart po crashu z licznikiem
+ExecStart=/usr/bin/gamescope-manager start-with-recovery --steam
+ExecStop=/usr/bin/gamescope-manager stop
+
+# Zatrzymanie przez systemd: max 35s (runner ma własny 30s timeout + 5s bufor)
+TimeoutStopSec=35
+
+# systemd NIE restartuje sam — start-with-recovery sam obsługuje pętle
+Restart=no
+
+# TTY3 — tty2 jest zarezerwowane dla SDDM/KDE w HackerOS
+StandardInput=tty
+TTYPath=/dev/tty3
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
+
+# Przełącz na tty3 przy starcie, wróć na tty2 przy zatrzymaniu
+ExecStartPre=/bin/chvt 3
+ExecStopPost=/bin/chvt 2
+
+# Środowisko
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_CURRENT_DESKTOP=gamescope
+Environment=XDG_SESSION_CLASS=user
+
+# CAP_SYS_NICE — dla priorytetów procesów (gamescope używa SCHED_FIFO dla gier)
+AmbientCapabilities=CAP_SYS_NICE
+
+# Limit czasu startu — jeśli gamescope nie wystartuje w 30s, systemd uzna za błąd
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target
