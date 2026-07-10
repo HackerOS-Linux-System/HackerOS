@@ -454,10 +454,13 @@ end
 local function step_run_build()
     heading("Wszystkie operacje plikowe zakończone. Uruchamianie build-hackeros")
 
+    -- Od teraz build/build-hackeros to skrypt Lua, nie bash - uruchamiamy go
+    -- jawnie przez interpreter lua5.5 (shebang w pliku i tak na to wskazuje,
+    -- ale jawne wywołanie jest pewniejsze niezależnie od uprawnień/PATH).
     local build_script = "build/build-hackeros"
     if exists(build_script) then
         chmodx(build_script)
-        sh("./" .. build_script)
+        sh("lua5.5 " .. quote(build_script))
     else
         io.stderr:write("Błąd: Skrypt " .. build_script .. " nie istnieje!\n")
         os.exit(1)
