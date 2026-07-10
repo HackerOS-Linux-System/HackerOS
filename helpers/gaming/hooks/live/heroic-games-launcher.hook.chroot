@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Przerwij wykonywanie skryptu w przypadku błędu
+set -e
+
+echo "=== Pobieranie Heroic Games Launcher ==="
+URL="https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v2.22.0/Heroic-2.22.0-linux-amd64.deb"
+OUTPUT="/tmp/heroic.deb"
+
+# Pobranie pliku za pomocą wget (upewnij się, że wget jest dostępny)
+# Jeśli wolisz curl, zamień na: curl -L -o "$OUTPUT" "$URL"
+wget -O "$OUTPUT" "$URL"
+
+echo "=== Instalacja Heroic Games Launcher ==="
+# Aktualizacja list pakietów, aby apt mógł rozwiązać zależności (np. biblioteki)
+apt-get update
+
+# Instalacja pobranego pliku .deb wraz z automatycznym pobraniem brakujących zależności
+apt-get install -y "$OUTPUT"
+
+echo "=== Czyszczenie po instalacji ==="
+# Usunięcie pobranego pliku .deb
+rm -f "$OUTPUT"
+
+# Opcjonalne czyszczenie pamięci podręcznej apt, aby zmniejszyć rozmiar obrazu
+apt-get clean
+rm -rf /var/lib/apt/lists/*
