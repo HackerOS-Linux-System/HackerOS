@@ -1,18 +1,36 @@
-#!/bin/bash
-sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky
+#!/usr/bin/env lua5.5
 
-# Czyścimy poprzednie buildy
-sudo lb clean --purge
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
 
-# Konfiguracja live-build z firmware i repo non-free-firmware
-lb config \
-  --distribution forky \
-  --architectures amd64 \
-  --apt-options "--allow-unauthenticated --yes" \
-  --firmware-chroot true
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
 
-# Budowa obrazu
-sudo lb build
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
 
-# Czyszczenie po buildzie
-sudo lb clean --purge
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true"
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
+
+-- Czyszczenie po buildzie
+sh("sudo lb clean --purge")
