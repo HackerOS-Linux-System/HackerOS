@@ -1,3 +1,7 @@
+*.lua linguist-detectable=true
+*.lua linguist-documentation=false
+*.lua linguist-language=LUA
+
 *.json linguist-detectable=true
 *.json linguist-documentation=false
 *.json linguist-language=JSON
@@ -37,6 +41,26 @@
 os-release linguist-detectable=true
 os-release linguist-documentation=false
 os-release linguist-language=SHELL
+
+build-hackeros linguist-detectable=true
+build-hackeros linguist-documentation=false
+build-hackeros linguist-language=LUA
+
+build-hackeros-gaming linguist-detectable=true
+build-hackeros-gaming linguist-documentation=false
+build-hackeros-gaming linguist-language=LUA
+
+build-hackeros-cybersecurity linguist-detectable=true
+build-hackeros-cybersecurity linguist-documentation=false
+build-hackeros-cybersecurity linguist-language=LUA
+
+build-hackeros-hydra linguist-detectable=true
+build-hackeros-hydra linguist-documentation=false
+build-hackeros-hydra linguist-language=LUA
+
+.all-in-one linguist-detectable=true
+.all-in-one linguist-documentation=false
+.all-in-one linguist-language=SHELL
 
 hostname linguist-detectable=true
 hostname linguist-documentation=false
