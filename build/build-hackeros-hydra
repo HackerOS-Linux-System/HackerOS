@@ -1,21 +1,101 @@
-#!/bin/bash
+#!/usr/bin/env lua5.5
 
+local WORKDIR          = "/home/michal-hackeros/Pobrane/hackeros-official"
+local HYDRA_TMP        = "/tmp/hydra-look-and-feel"
+local TARGET_INCLUDES  = WORKDIR .. "/config/includes.chroot_after_packages"
+local ISO_SRC          = WORKDIR .. "/live-image-amd64.hybrid.iso"
+local ISO_DEST_DIR     = "/home/michal-hackeros/Pobrane/"
 
+-- =====================================================================
+-- FUNKCJE POMOCNICZE
+-- =====================================================================
 
-sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
 
-# Czyścimy poprzednie buildy
-sudo lb clean --purge
+-- Polecenia niezależne od katalogu roboczego (np. klonowanie do /tmp).
+local function sh_raw(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
 
-# Konfiguracja live-build z firmware i repo non-free-firmware
-lb config \
-  --distribution forky \
-  --architectures amd64 \
-  --apt-options "--allow-unauthenticated --yes" \
-  --firmware-chroot true
+-- Polecenia wykonywane w kontekście WORKDIR (odpowiednik `cd` z bash, które
+-- w Lua nie przetrwałoby między kolejnymi os.execute).
+local function sh(cmd)
+    return sh_raw("cd " .. quote(WORKDIR) .. " && " .. cmd)
+end
 
-# Budowa obrazu
-sudo lb build
+local function isdir(path)
+    return os.execute("test -d " .. quote(path)) == true
+end
 
-# Czyszczenie po buildzie
-sudo lb clean --purge
+-- =====================================================================
+-- KROK 0: hydra-look-and-feel -> config/includes.chroot_after_packages
+-- =====================================================================
+
+local function step_hydra_look_and_feel()
+    io.write("=== Pobieranie hydra-look-and-feel ===\n")
+
+    sh_raw("rm -rf " .. quote(HYDRA_TMP))
+    sh_raw(
+        "git clone --depth 1 https://github.com/HackerOS-Linux-System/hydra-look-and-feel.git " ..
+        quote(HYDRA_TMP)
+    )
+
+    local files_src = HYDRA_TMP .. "/files"
+
+    if isdir(files_src) then
+        sh_raw("mkdir -p " .. quote(TARGET_INCLUDES))
+        sh_raw("cp -r " .. quote(files_src) .. "/. " .. quote(TARGET_INCLUDES))
+    else
+        io.stderr:write("Ostrzeżenie: Nie znaleziono katalogu " .. files_src .. " w hydra-look-and-feel\n")
+    end
+
+    sh_raw("rm -rf " .. quote(HYDRA_TMP))
+end
+
+-- =====================================================================
+-- BUILD (1:1 zgodny z dostarczonym skryptem bash, bez zmian logiki)
+-- =====================================================================
+
+local function step_build()
+    os.execute("clear")
+
+    -- Czyścimy poprzednie buildy
+    sh("sudo lb clean --purge")
+
+    -- Konfiguracja live-build z firmware i repo non-free-firmware
+    sh(
+        "lb config " ..
+        "--distribution forky " ..
+        "--architectures amd64 " ..
+        '--apt-options "--allow-unauthenticated --yes" ' ..
+        "--firmware-chroot true"
+    )
+
+    -- Budowa obrazu
+    sh("sudo lb build")
+
+    -- Przenosimy gotowe ISO
+    sh("sudo mv " .. quote(ISO_SRC) .. " " .. quote(ISO_DEST_DIR))
+
+    -- Czyszczenie po buildzie
+    sh("sudo lb clean --purge")
+end
+
+-- =====================================================================
+-- GŁÓWNA FUNKCJA
+-- =====================================================================
+
+local function main()
+    step_hydra_look_and_feel()
+    step_build()
+end
+
+main()
