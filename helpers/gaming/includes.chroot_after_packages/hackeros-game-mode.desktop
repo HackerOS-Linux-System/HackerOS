@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Switch to Game Mode
+Name[pl]=Przełącz na tryb gry
+Comment=Switch HackerOS to Gamescope + Steam Big Picture Mode
+Comment[pl]=Przełącza HackerOS na tryb gry (Gamescope + Steam BPM)
+Exec=pkexec /usr/bin/gaming-cli switch game-mode
+Icon=/usr/lib/HackerOS/icons/steam-gaming-return.svg
+Terminal=false
+Categories=Game;System;
+Keywords=game;gaming;gamescope;steam;hackeros;
+StartupNotify=true
