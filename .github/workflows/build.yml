@@ -1,1 +1,88 @@
+name: Build HackerOS
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "official" ]
+
+env:
+  # Wersja Lua do zbudowania ze źródeł (na dzień pisania tego workflow Lua 5.5
+  # nie ma jeszcze paczki w repozytoriach Ubuntu, więc kompilujemy ją ręcznie).
+  LUA_VERSION: "5.5.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repozytorium
+        uses: actions/checkout@v4
+
+      - name: Aktualizacja listy pakietów
+        run: sudo apt-get update
+
+      - name: Instalacja podstawowych narzędzi
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            tar \
+            git \
+            curl \
+            ca-certificates \
+            build-essential \
+            make \
+            gcc \
+            libreadline-dev
+
+      - name: Instalacja Pythona 3.13 (deadsnakes PPA)
+        run: |
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.13 python3.13-venv python3.13-dev
+
+      - name: Budowa i instalacja Lua ${{ env.LUA_VERSION }} ze źródeł
+        run: |
+          curl -fL -o "lua-${LUA_VERSION}.tar.gz" \
+            "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz"
+          tar -xzf "lua-${LUA_VERSION}.tar.gz"
+          cd "lua-${LUA_VERSION}"
+          make linux -j"$(nproc)"
+          sudo make install
+          cd ..
+          lua5.5 -v || lua -v
+
+      - name: Instalacja live-build i narzędzi do tworzenia obrazu ISO
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            live-build \
+            debootstrap \
+            squashfs-tools \
+            xorriso \
+            isolinux \
+            syslinux-common \
+            syslinux-efi \
+            dosfstools \
+            mtools \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            grub-efi-ia32-bin \
+            mtd-utils
+
+      - name: Uruchomienie build.lua
+        run: |
+          chmod +x build.lua
+          lua5.5 build.lua
+
+      - name: Wyszukanie zbudowanych obrazów ISO
+        id: find_iso
+        run: |
+          echo "iso_found=$(find . -maxdepth 3 -iname '*.iso' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Wgranie ISO jako artefaktu builda
+        if: steps.find_iso.outputs.iso_found != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: hackeros-iso
+          path: "**/*.iso"
+          if-no-files-found: warn
