@@ -150,3 +150,31 @@ sudo lb clean --purge
 
 echo ""
 echo "==> Gotowe! ISO jest w /home/michal-hackeros/Pobrane/"
+
+----- Hydra -----
+#!/bin/bash
+clear
+
+# --- Hydra look-and-feel ---
+#!/bin/bash
+rm -rf /tmp/hydra-look-and-feel
+git clone --depth 1 https://github.com/HackerOS-Linux-System/hydra-look-and-feel.git /tmp/hydra-look-and-feel
+mkdir -p /home/michal-hackeros/Pobrane/hackeros-official/config/includes.chroot_after_packages
+cp -r /tmp/hydra-look-and-feel/files/. /home/michal-hackeros/Pobrane/hackeros-official/config/includes.chroot_after_packages/
+rm -rf /tmp/hydra-look-and-feel
+
+cd /home/michal-hackeros/Pobrane/hackeros-official/
+# Czyścimy poprzednie buildy
+sudo lb clean --purge
+# Konfiguracja live-build z firmware i repo non-free-firmware
+lb config \
+  --distribution forky \
+  --architectures amd64 \
+  --apt-options "--allow-unauthenticated --yes" \
+  --firmware-chroot true
+# Budowa obrazu
+sudo lb build
+# Przenosimy gotowe ISO
+sudo mv /home/michal-hackeros/Pobrane/hackeros-official/live-image-amd64.hybrid.iso /home/michal-hackeros/Pobrane/
+# Czyszczenie po buildzie
+sudo lb clean --purge
