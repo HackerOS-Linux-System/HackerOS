@@ -1,95 +1,204 @@
-#!/bin/bash
+#!/usr/bin/env lua5.5
 
-sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky
+local BINARY_FILE   = "/usr/lib/live/build/binary"
+local BINARY_BACKUP = "/usr/lib/live/build/binary.backup"
 
+-- =====================================================================
+-- FUNKCJE POMOCNICZE
+-- =====================================================================
+
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function fail(msg)
+    error(msg, 0)
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        fail("Błąd: polecenie nie powiodło się: " .. cmd)
+    end
+    return true
+end
+
+local function exists(path)
+    return os.execute("test -e " .. quote(path)) == true
+end
+
+-- Proste, dosłowne (nie-pattern) wyszukiwanie/zamiana - unika problemów
+-- z interpretacją znaków specjalnych Lua-patternów (np. "$", "%").
+local function plain_replace(s, old, new, max_count)
+    local out, start, n = {}, 1, 0
+    while true do
+        if max_count and n >= max_count then
+            out[#out + 1] = s:sub(start)
+            break
+        end
+        local i, j = s:find(old, start, true)
+        if not i then
+            out[#out + 1] = s:sub(start)
+            break
+        end
+        out[#out + 1] = s:sub(start, i - 1)
+        out[#out + 1] = new
+        start = j + 1
+        n = n + 1
+    end
+    return table.concat(out)
+end
+
+local function restore_backup()
+    if exists(BINARY_BACKUP) then
+        io.write("==> Przywracam oryginalny plik...\n")
+        os.execute("sudo cp " .. quote(BINARY_BACKUP) .. " " .. quote(BINARY_FILE))
+        os.execute("sudo rm " .. quote(BINARY_BACKUP))
+    end
+end
+
+-- =====================================================================
+-- PATCH /usr/lib/live/build/binary
+-- =====================================================================
+
+local function patch_binary_script()
+    io.write("==> Patchowanie...\n")
+
+    local f = io.open(BINARY_FILE, "r")
+    if not f then
+        fail("Nie mogę otworzyć do odczytu: " .. BINARY_FILE)
+    end
+    local content = f:read("*a")
+    f:close()
+
+    local old = 'lb binary_syslinux "${@}"'
+    local new = table.concat({
+        "# Kopiowanie jadra xanmod do binary/live/",
+        "mkdir -p binary/live",
+        "VMLINUZ=$(ls chroot/boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)",
+        "INITRD=$(ls chroot/boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)",
+        'if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" "binary/live/$(basename $VMLINUZ)"; fi',
+        'if [ -n "$INITRD" ]; then cp "$INITRD" "binary/live/$(basename $INITRD)"; fi',
+        'lb binary_syslinux "${@}"',
+    }, "\n")
+
+    if not content:find(old, 1, true) then
+        fail("Nie znaleziono wzorca do podmiany w " .. BINARY_FILE)
+    end
+
+    local patched = plain_replace(content, old, new, 1)
+
+    -- Zapis do systemowego pliku wymaga roota - piszemy do pliku tymczasowego,
+    -- a potem podmieniamy go przez sudo cp.
+    local tmp = os.tmpname()
+    local out = io.open(tmp, "w")
+    out:write(patched)
+    out:close()
+
+    sh("sudo cp " .. quote(tmp) .. " " .. quote(BINARY_FILE))
+    os.remove(tmp)
+end
+
+-- =====================================================================
+-- HOOK CHROOTOWY: symlinki jądra xanmod
+-- =====================================================================
+
+local XANMOD_HOOK_PATH = "config/hooks/normal/0010-xanmod-symlink.hook.chroot"
+
+local XANMOD_HOOK_CONTENT = [[#!/bin/sh
 set -e
-
-restore_backup() {
-    if [ -f /usr/lib/live/build/binary.backup ]; then
-        echo "==> Przywracam oryginalny plik..."
-        sudo cp /usr/lib/live/build/binary.backup /usr/lib/live/build/binary
-        sudo rm /usr/lib/live/build/binary.backup
-    fi
-}
-trap restore_backup EXIT
-
-echo "==> Backup /usr/lib/live/build/binary..."
-sudo cp /usr/lib/live/build/binary /usr/lib/live/build/binary.backup
-
-echo "==> Patchowanie..."
-sudo python3 -c "
-content = open('/usr/lib/live/build/binary').read()
-old = 'lb binary_syslinux \"\${@}\"'
-new = '''# Kopiowanie jadra xanmod do binary/live/
-mkdir -p binary/live
-VMLINUZ=\$(ls chroot/boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)
-INITRD=\$(ls chroot/boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)
-if [ -n \"\$VMLINUZ\" ]; then cp \"\$VMLINUZ\" \"binary/live/\$(basename \$VMLINUZ)\"; fi
-if [ -n \"\$INITRD\" ]; then cp \"\$INITRD\" \"binary/live/\$(basename \$INITRD)\"; fi
-lb binary_syslinux \"\${@}\"'''
-open('/usr/lib/live/build/binary', 'w').write(content.replace(old, new))
-"
-
-echo "==> Weryfikacja patcha:"
-grep -n -A8 "Kopiowanie jadra" /usr/lib/live/build/binary
-
-sudo lb clean --purge
-
-# Usun stare hooki binary zeby nie przeszkadzaly
-rm -f config/hooks/normal/0020-xanmod-binary.hook.binary
-
-lb config \
-  --distribution forky \
-  --architectures amd64 \
-  --apt-options "--allow-unauthenticated --yes" \
-  --firmware-chroot true \
-  --linux-flavours "none" \
-  --linux-packages "none"
-
-sudo rm -rf \
-  config/includes.chroot_after_packages/usr/bin/chker \
-  config/includes.chroot_after_packages/usr/bin/hackeros-steam
-
-echo 'LB_ADD_ARCHITECTURES="i386"' >> config/chroot
-
-mkdir -p config/hooks/normal
-cat > config/hooks/normal/0010-xanmod-symlink.hook.chroot << 'EOF'
-#!/bin/sh
-set -e
-
 VMLINUZ=$(ls /boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)
 if [ -z "$VMLINUZ" ]; then
     echo "E: Brak jadra xanmod!"
     exit 1
 fi
-
 KVER=$(basename "$VMLINUZ" | sed 's/vmlinuz-//')
-
 if [ ! -f "/boot/initrd.img-${KVER}" ]; then
     echo "I: Generowanie initrd dla ${KVER}..."
     update-initramfs -c -k "${KVER}"
 fi
-
 INITRD=$(ls /boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)
-
 if [ -z "$INITRD" ]; then
     echo "E: Brak initrd xanmod!"
     exit 1
 fi
-
 ln -sf "$VMLINUZ" /boot/vmlinuz
 ln -sf "$VMLINUZ" /vmlinuz
 ln -sf "$INITRD" /boot/initrd.img
 ln -sf "$INITRD" /initrd.img
-
 echo "I: Jadro: $VMLINUZ"
 echo "I: Initrd: $INITRD"
-EOF
-chmod +x config/hooks/normal/0010-xanmod-symlink.hook.chroot
+]]
 
-sudo lb build
+local function write_xanmod_hook()
+    sh("mkdir -p config/hooks/normal")
+    local f = io.open(XANMOD_HOOK_PATH, "w")
+    if not f then
+        fail("Nie mogę utworzyć pliku: " .. XANMOD_HOOK_PATH)
+    end
+    f:write(XANMOD_HOOK_CONTENT)
+    f:close()
+    sh("chmod +x " .. quote(XANMOD_HOOK_PATH))
+end
 
-sudo lb clean --purge
+-- =====================================================================
+-- GŁÓWNA LOGIKA BUILDA
+-- =====================================================================
 
-echo ""
-echo "==> Gotowe! ISO jest w /home/michal-hackeros/Pobrane/"
+local function main()
+    sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+    io.write("==> Backup " .. BINARY_FILE .. "...\n")
+    sh("sudo cp " .. quote(BINARY_FILE) .. " " .. quote(BINARY_BACKUP))
+
+    patch_binary_script()
+
+    io.write("==> Weryfikacja patcha:\n")
+    sh('grep -n -A8 "Kopiowanie jadra" ' .. quote(BINARY_FILE))
+
+    sh("sudo lb clean --purge")
+
+    -- Usuń stare hooki binary, żeby nie przeszkadzały
+    os.execute("rm -f config/hooks/normal/0020-xanmod-binary.hook.binary")
+
+    sh(
+        "lb config " ..
+        "--distribution forky " ..
+        "--architectures amd64 " ..
+        '--apt-options "--allow-unauthenticated --yes" ' ..
+        "--firmware-chroot true " ..
+        '--linux-flavours "none" ' ..
+        '--linux-packages "none"'
+    )
+
+    sh(
+        "sudo rm -rf " ..
+        quote("config/includes.chroot_after_packages/usr/bin/chker") .. " " ..
+        quote("config/includes.chroot_after_packages/usr/bin/hackeros-steam")
+    )
+
+    do
+        local f = io.open("config/chroot", "a")
+        if not f then
+            fail("Nie mogę otworzyć do dopisania: config/chroot")
+        end
+        f:write('LB_ADD_ARCHITECTURES="i386"\n')
+        f:close()
+    end
+
+    write_xanmod_hook()
+
+    sh("sudo lb build")
+    sh("sudo lb clean --purge")
+
+    io.write("\n==> Gotowe! ISO jest w /home/michal-hackeros/Pobrane/\n")
+end
+
+local ok, err = pcall(main)
+restore_backup()
+
+if not ok then
+    io.stderr:write(tostring(err) .. "\n")
+    os.exit(1)
+end
