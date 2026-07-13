@@ -1,1 +1,57 @@
+#!/usr/bin/env lua5.5
 
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+-- Katalog docelowy na binarki HWDE
+local bin_dir = "config/includes.chroot_after_packages/usr/bin"
+
+-- Kopiujemy zawartość helpers/hwde/ do config/
+sh("mkdir -p config")
+sh("cp -r helpers/hwde/. config/")
+
+-- Tworzymy docelowy katalog na pliki binarne
+sh("mkdir -p " .. quote(bin_dir))
+
+-- Pobieramy pliki HWDE
+sh("wget -O " .. quote(bin_dir .. "/comphwde") ..
+   " https://github.com/HackerOS-Linux-System/HWDE/releases/download/v0.1/comphwde")
+
+sh("wget -O " .. quote(bin_dir .. "/starthwde") ..
+   " https://github.com/HackerOS-Linux-System/HWDE/releases/download/v0.1/starthwde")
+
+-- Nadajemy prawa wykonywania
+sh("chmod a+x " .. quote(bin_dir .. "/comphwde"))
+sh("chmod a+x " .. quote(bin_dir .. "/starthwde"))
+
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true"
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
+
+-- Czyszczenie po buildzie
+sh("sudo lb clean --purge")
