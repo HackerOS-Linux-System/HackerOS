@@ -58,6 +58,22 @@ build-hackeros-hydra linguist-detectable=true
 build-hackeros-hydra linguist-documentation=false
 build-hackeros-hydra linguist-language=LUA
 
+build-hackeros-blue linguist-detectable=true
+build-hackeros-blue linguist-documentation=false
+build-hackeros-blue linguist-language=LUA
+
+build-hackeros-hwde linguist-detectable=true
+build-hackeros-hwde linguist-documentation=false
+build-hackeros-hwde linguist-language=LUA
+
+build-hackeros-gnome linguist-detectable=true
+build-hackeros-gnome linguist-documentation=false
+build-hackeros-gnome linguist-language=LUA
+
+build-hackeros-xfce linguist-detectable=true
+build-hackeros-xfce linguist-documentation=false
+build-hackeros-xfce linguist-language=LUA
+
 .all-in-one linguist-detectable=true
 .all-in-one linguist-documentation=false
 .all-in-one linguist-language=SHELL
