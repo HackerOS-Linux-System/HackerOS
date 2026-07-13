@@ -1,1 +1,93 @@
+#!/usr/bin/env lua5.5
 
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+local function download(url, dest)
+    sh("wget -q --show-progress -O " .. quote(dest) .. " " .. quote(url))
+end
+
+-- Katalogi docelowe
+local BLUE_DIR      = "config/includes.chroot_after_packages/usr/share/Blue-Environment"
+local BLUE_LIB_DIR  = BLUE_DIR .. "/lib"
+local WALLPAPER_DIR = "config/includes.chroot_after_packages/usr/share/wallpapers"
+
+-- Bazowy URL do releasa
+local RELEASE_BASE = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.6"
+
+-- Raw URL-e (blob/tree nie nadają się do pobierania bezpośrednio)
+local VERSION_URL    = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/config/version.json"
+local WALLPAPER_URL  = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/images/default.png"
+
+--------------------------------------------------------------------------
+-- 1. Kopiujemy zawartość helpers/blue/* do config/
+--------------------------------------------------------------------------
+sh("mkdir -p config")
+sh("cp -r helpers/blue/. config/")
+
+--------------------------------------------------------------------------
+-- 2. Tworzymy potrzebne katalogi
+--------------------------------------------------------------------------
+sh("mkdir -p " .. quote(BLUE_DIR))
+sh("mkdir -p " .. quote(BLUE_LIB_DIR))
+sh("mkdir -p " .. quote(WALLPAPER_DIR))
+
+--------------------------------------------------------------------------
+-- 3. Pobieramy binarki Blue-Environment
+--------------------------------------------------------------------------
+download(RELEASE_BASE .. "/blue-environment", BLUE_DIR .. "/blue-environment")
+download(RELEASE_BASE .. "/blue-compositor",  BLUE_LIB_DIR .. "/blue-compositor")
+download(RELEASE_BASE .. "/blue",             BLUE_DIR .. "/blue")
+
+--------------------------------------------------------------------------
+-- 4. Nadajemy prawa wykonywania binarkom
+--------------------------------------------------------------------------
+sh("chmod a+x " .. quote(BLUE_DIR .. "/blue-environment"))
+sh("chmod a+x " .. quote(BLUE_LIB_DIR .. "/blue-compositor"))
+sh("chmod a+x " .. quote(BLUE_DIR .. "/blue"))
+
+--------------------------------------------------------------------------
+-- 5. Pobieramy version.json jako .version
+--------------------------------------------------------------------------
+download(VERSION_URL, BLUE_DIR .. "/.version")
+
+--------------------------------------------------------------------------
+-- 6. Pobieramy domyślną tapetę
+--------------------------------------------------------------------------
+download(WALLPAPER_URL, WALLPAPER_DIR .. "/default.png")
+
+--------------------------------------------------------------------------
+-- Dalej: właściwy build live-build
+--------------------------------------------------------------------------
+
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true"
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
+
+-- Czyszczenie po buildzie
+sh("sudo lb clean --purge")
