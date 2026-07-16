@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+<wallpapers>
+    <wallpaper deleted="false">
+        <name>Wallpaper 12 HackerOS</name>
+        <filename>/usr/share/wallpapers/HackerOS-Wallpapers/Wallpaper12.png</filename>
+        <options>zoom</options>
+        <shade_type>solid</shade_type>
+        <pcolor>#000000</pcolor>
+        <scolor>#ffffff</scolor>
+    </wallpaper>
+</wallpapers>
