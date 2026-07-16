@@ -66,6 +66,10 @@ build-hackeros-hwde linguist-detectable=true
 build-hackeros-hwde linguist-documentation=false
 build-hackeros-hwde linguist-language=LUA
 
+build-hackeros-nvidia linguist-detectable=true
+build-hackeros-nvidia linguist-documentation=false
+build-hackeros-nvidia linguist-language=LUA
+
 build-hackeros-gnome linguist-detectable=true
 build-hackeros-gnome linguist-documentation=false
 build-hackeros-gnome linguist-language=LUA
