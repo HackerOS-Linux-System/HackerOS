@@ -82,7 +82,7 @@ end
 
 -- Kategoria: HackerOS-Apps
 local VER_STORE    = "v0.6"
-local VER_LAUNCHER = "v0.9"
+local VER_LAUNCHER = "v1.0"
 local VER_PROTON   = "v0.0.1"
 local VER_TERM     = "v0.8"
 local VER_WELCOME  = "v0.6"
@@ -101,6 +101,9 @@ local VER_HEDIT  = "v0.5"
 
 -- Kategoria: HackerOS-Games
 local VER_GAMES  = "v0.8"
+
+-- Kategoria: gaming-cli (edycja --gaming)
+local VER_GAMING = "v0.2"
 
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
@@ -127,6 +130,88 @@ local USR_LIBEXEC        = "config/includes.chroot_after_packages/usr/libexec"
 local PACKAGES_CHROOT    = "config/packages.chroot"
 
 local LANG_TMP           = "/tmp/Hacker-Lang"
+
+local CONFIG_DIR         = "config"
+local GAMING_HELPERS_SRC = "helpers/gaming"
+
+-- =====================================================================
+-- DEFINICJE EDYCJI (FLAG WIERSZA POLECEŃ)
+-- =====================================================================
+-- Każda edycja to jedna flaga --nazwa. Dla edycji w pełni obsługiwanych
+-- (obecnie tylko "gaming") podajemy build_script - skrypt Lua, który
+-- zostanie uruchomiony zamiast domyślnego build/build-hackeros.
+-- Edycje oznaczone placeholder = true nie mają jeszcze własnej logiki -
+-- zostaną rozbudowane w przyszłości. Na razie zachowują się jak build
+-- domyślny (z samą informacją w logu), tak aby flagi dało się już
+-- podawać bez błędu.
+
+local EDITIONS = {
+    gaming = {
+        build_script = "build/build-hackeros-gaming",
+        placeholder  = false,
+    },
+    cybersecurity            = { placeholder = true },
+    blue                     = { placeholder = true },
+    hwde                     = { placeholder = true },
+    hydra                    = { placeholder = true },
+    ["cybersecurity-default"] = { placeholder = true },
+    lts                      = { placeholder = true },
+    gnome                    = { placeholder = true },
+    xfce                     = { placeholder = true },
+    atomic                   = { placeholder = true },
+}
+
+local function print_help()
+    io.write([[
+Użycie: lua5.5 build.lua [FLAGA]
+
+Bez flagi - standardowy build HackerOS.
+
+Dostępne flagi edycji (można podać tylko jedną naraz):
+  --gaming                 Edycja gamingowa (helpers/gaming, gaming-cli,
+                            build/build-hackeros-gaming, bez HackerOS-Steam)
+  --cybersecurity           (placeholder - w przygotowaniu)
+  --blue                    (placeholder - w przygotowaniu)
+  --hwde                    (placeholder - w przygotowaniu)
+  --hydra                   (placeholder - w przygotowaniu)
+  --cybersecurity-default   (placeholder - w przygotowaniu)
+  --lts                     (placeholder - w przygotowaniu)
+  --gnome                   (placeholder - w przygotowaniu)
+  --xfce                    (placeholder - w przygotowaniu)
+  --atomic                  (placeholder - w przygotowaniu)
+  --help                    Wyświetla tę pomoc
+
+]])
+end
+
+-- Parsuje argumenty wiersza poleceń i zwraca nazwę wybranej edycji
+-- (lub nil, jeśli nie podano żadnej flagi).
+local function parse_flag(argv)
+    local selected = nil
+    for i = 1, #argv do
+        local a = argv[i]
+        local flag = a:match("^%-%-(.+)$")
+        if flag == "help" then
+            print_help()
+            os.exit(0)
+        elseif flag then
+            if not EDITIONS[flag] then
+                io.stderr:write("Błąd: nieznana flaga: --" .. flag .. "\n")
+                print_help()
+                os.exit(1)
+            end
+            if selected then
+                io.stderr:write("Błąd: można podać tylko jedną flagę edycji naraz (już wybrano --" ..
+                                 selected .. ", otrzymano --" .. flag .. ")\n")
+                os.exit(1)
+            end
+            selected = flag
+        else
+            io.stderr:write("Ostrzeżenie: nieznany argument, ignoruję: " .. a .. "\n")
+        end
+    end
+    return selected
+end
 
 -- =====================================================================
 -- KROK 1: KLONOWANIE HackerOS-Updates I KOPIOWANIE ZAWARTOŚCI
@@ -178,7 +263,9 @@ end
 -- KROK 3: POBIERANIE NARZĘDZI SYSTEMOWYCH DO /usr/bin
 -- =====================================================================
 
-local function step_download_bin_tools()
+-- W trybie --gaming pomijamy pobieranie hackeros-steam (zastępowanego
+-- przez narzędzia gaming-cli).
+local function step_download_bin_tools(edition)
     heading("Pobieranie narzędzi systemowych do /usr/bin")
 
     local tools = {
@@ -195,11 +282,15 @@ local function step_download_bin_tools()
     }
 
     for _, tool in ipairs(tools) do
-        local url  = "https://github.com/HackerOS-Linux-System/" .. tool.repo ..
-                     "/releases/download/" .. tool.ver .. "/" .. tool.name
-        local dest = TARGET_BIN .. "/" .. tool.name
-        download(url, dest)
-        chmodx(dest)
+        if edition == "gaming" and tool.name == "hackeros-steam" then
+            io.write("Tryb --gaming: pomijam pobieranie " .. tool.name .. "\n")
+        else
+            local url  = "https://github.com/HackerOS-Linux-System/" .. tool.repo ..
+                         "/releases/download/" .. tool.ver .. "/" .. tool.name
+            local dest = TARGET_BIN .. "/" .. tool.name
+            download(url, dest)
+            chmodx(dest)
+        end
     end
 end
 
@@ -320,7 +411,14 @@ end
 -- KROK 9: BINARKI STEAM (gui, tui)
 -- =====================================================================
 
-local function step_download_steam_bin()
+-- W trybie --gaming pomijamy Steam całkowicie (zastępowanego przez
+-- narzędzia gaming-cli).
+local function step_download_steam_bin(edition)
+    if edition == "gaming" then
+        heading("Tryb --gaming: pomijam pobieranie binarek Steam (gui, tui)")
+        return
+    end
+
     heading("Pobieranie binarek Steam (gui, tui)")
 
     mkdirp(STEAM_BIN_DIR)
@@ -448,16 +546,65 @@ local function step_chmod_static_files()
 end
 
 -- =====================================================================
--- KROK 15: URUCHOMIENIE SKRYPTU BUDUJĄCEGO SYSTEM
+-- KROK 15 (TYLKO --gaming): KOPIOWANIE helpers/gaming/* DO config/
 -- =====================================================================
 
-local function step_run_build()
-    heading("Wszystkie operacje plikowe zakończone. Uruchamianie build-hackeros")
+local function step_copy_gaming_helpers()
+    heading("Tryb --gaming: kopiowanie helpers/gaming do config/")
 
-    -- Od teraz build/build-hackeros to skrypt Lua, nie bash - uruchamiamy go
+    if isdir(GAMING_HELPERS_SRC) then
+        mkdirp(CONFIG_DIR)
+        sh("cp -r " .. quote(GAMING_HELPERS_SRC) .. "/. " .. quote(CONFIG_DIR))
+    else
+        io.write("Ostrzeżenie: Nie znaleziono katalogu " .. GAMING_HELPERS_SRC .. "\n")
+    end
+end
+
+-- =====================================================================
+-- KROK 16 (TYLKO --gaming): BINARKI gaming-cli DO /usr/bin
+-- =====================================================================
+
+local function step_download_gaming_cli_tools()
+    heading("Tryb --gaming: pobieranie binarek gaming-cli do /usr/bin")
+
+    mkdirp(TARGET_BIN)
+
+    local tools = { "gamescope-manager", "gaming", "gaming-cli" }
+
+    for _, name in ipairs(tools) do
+        local url  = "https://github.com/HackerOS-Linux-System/gaming-cli/releases/download/" ..
+                     VER_GAMING .. "/" .. name
+        local dest = TARGET_BIN .. "/" .. name
+        download(url, dest)
+        chmodx(dest)
+    end
+end
+
+-- =====================================================================
+-- KROK 17: URUCHOMIENIE SKRYPTU BUDUJĄCEGO SYSTEM
+-- =====================================================================
+
+-- Wybiera skrypt budujący zależnie od edycji: dla edycji w pełni
+-- obsługiwanych (np. gaming) używa build_script z EDITIONS; dla edycji
+-- placeholder (jeszcze nieobsłużonych) i dla builda domyślnego używa
+-- build/build-hackeros.
+local function step_run_build(edition)
+    local info = edition and EDITIONS[edition]
+    local build_script = "build/build-hackeros"
+
+    if info and info.build_script then
+        build_script = info.build_script
+    elseif info and info.placeholder then
+        io.write("Uwaga: flaga --" .. edition ..
+                  " jest obecnie placeholderem - dedykowana logika zostanie dodana w przyszłości. " ..
+                  "Uruchamiam standardowy build-hackeros.\n")
+    end
+
+    heading("Wszystkie operacje plikowe zakończone. Uruchamianie " .. build_script)
+
+    -- Od teraz build/build-hackeros* to skrypty Lua, nie bash - uruchamiamy je
     -- jawnie przez interpreter lua5.5 (shebang w pliku i tak na to wskazuje,
     -- ale jawne wywołanie jest pewniejsze niezależnie od uprawnień/PATH).
-    local build_script = "build/build-hackeros"
     if exists(build_script) then
         chmodx(build_script)
         sh("lua5.5 " .. quote(build_script))
@@ -472,11 +619,14 @@ end
 -- =====================================================================
 
 local function main()
-    io.write("=== Rozpoczynanie przygotowania struktury systemu HackerOS ===\n")
+    local edition = parse_flag(arg or {})
+
+    io.write("=== Rozpoczynanie przygotowania struktury systemu HackerOS" ..
+             (edition and (" (edycja: --" .. edition .. ")") or "") .. " ===\n")
 
     step_clone_updates_repo()
     step_download_apps()
-    step_download_bin_tools()
+    step_download_bin_tools(edition)
     step_extract_archives()
     step_copy_desktop_files()
     step_cleanup_updates_repo()
@@ -484,14 +634,19 @@ local function main()
     step_download_vivaldi()
 
     step_download_hackeros_hacker_tools()
-    step_download_steam_bin()
+    step_download_steam_bin(edition)
     step_download_games()
     step_hacker_lang()
     step_hnm_skel()
     step_python_venv()
     step_chmod_static_files()
 
-    step_run_build()
+    if edition == "gaming" then
+        step_copy_gaming_helpers()
+        step_download_gaming_cli_tools()
+    end
+
+    step_run_build(edition)
 end
 
 main()
