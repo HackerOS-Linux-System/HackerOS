@@ -2,6 +2,10 @@
 *.lua linguist-documentation=false
 *.lua linguist-language=LUA
 
+*.xml linguist-detectable=true
+*.xml linguist-documentation=false
+*.xml linguist-language=xml
+
 *.json linguist-detectable=true
 *.json linguist-documentation=false
 *.json linguist-language=JSON
