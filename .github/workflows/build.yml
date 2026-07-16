@@ -1,27 +1,62 @@
 name: Build HackerOS
-
 on:
   workflow_dispatch:
+    inputs:
+      edition:
+        description: "Edycja HackerOS do zbudowania (tylko przy ręcznym uruchomieniu)"
+        required: false
+        default: "default"
+        type: choice
+        options:
+          - default
+          - gaming
+          - cybersecurity
+          - blue
+          - hwde
+          - hydra
+          - cybersecurity-default
+          - lts
+          - gnome
+          - xfce
+          - atomic
   push:
     branches: [ "official" ]
-
 env:
   # Wersja Lua do zbudowania ze źródeł (na dzień pisania tego workflow Lua 5.5
   # nie ma jeszcze paczki w repozytoriach Ubuntu, więc kompilujemy ją ręcznie).
   LUA_VERSION: "5.5.0"
-
 jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      editions: ${{ steps.set-matrix.outputs.editions }}
+    steps:
+      - name: Wyznaczenie listy edycji do zbudowania
+        id: set-matrix
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            EDITION="${{ github.event.inputs.edition }}"
+            if [ -z "$EDITION" ]; then
+              EDITION="default"
+            fi
+            echo "editions=[\"$EDITION\"]" >> "$GITHUB_OUTPUT"
+          else
+            # Push na branch "official" - budujemy wszystkie edycje.
+            echo 'editions=["default","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic"]' >> "$GITHUB_OUTPUT"
+          fi
   build:
+    needs: setup
     runs-on: ubuntu-24.04
     timeout-minutes: 360
-
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJson(needs.setup.outputs.editions) }}
     steps:
       - name: Checkout repozytorium
         uses: actions/checkout@v4
-
       - name: Aktualizacja listy pakietów
         run: sudo apt-get update
-
       - name: Instalacja podstawowych narzędzi
         run: |
           sudo apt-get install -y --no-install-recommends \
@@ -33,14 +68,12 @@ jobs:
             make \
             gcc \
             libreadline-dev
-
       - name: Instalacja Pythona 3.13 (deadsnakes PPA)
         run: |
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:deadsnakes/ppa
           sudo apt-get update
           sudo apt-get install -y python3.13 python3.13-venv python3.13-dev
-
       - name: Budowa i instalacja Lua ${{ env.LUA_VERSION }} ze źródeł
         run: |
           curl -fL -o "lua-${LUA_VERSION}.tar.gz" \
@@ -51,7 +84,6 @@ jobs:
           sudo make install
           cd ..
           lua5.5 -v || lua -v
-
       - name: Instalacja live-build i narzędzi do tworzenia obrazu ISO
         run: |
           sudo apt-get install -y --no-install-recommends \
@@ -68,21 +100,22 @@ jobs:
             grub-efi-amd64-bin \
             grub-efi-ia32-bin \
             mtd-utils
-
-      - name: Uruchomienie build.lua
+      - name: Uruchomienie build.lua (edycja - ${{ matrix.edition }})
         run: |
           chmod +x build.lua
-          lua5.5 build.lua
-
+          if [ "${{ matrix.edition }}" = "default" ]; then
+            lua5.5 build.lua
+          else
+            lua5.5 build.lua --${{ matrix.edition }}
+          fi
       - name: Wyszukanie zbudowanych obrazów ISO
         id: find_iso
         run: |
           echo "iso_found=$(find . -maxdepth 3 -iname '*.iso' | head -n1)" >> "$GITHUB_OUTPUT"
-
       - name: Wgranie ISO jako artefaktu builda
         if: steps.find_iso.outputs.iso_found != ''
         uses: actions/upload-artifact@v4
         with:
-          name: hackeros-iso
+          name: hackeros-iso-${{ matrix.edition }}
           path: "**/*.iso"
           if-no-files-found: warn
