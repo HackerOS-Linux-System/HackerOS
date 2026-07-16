@@ -85,3 +85,7 @@ build-hackeros-cybersecurity-default linguist-language=LUA
 hostname linguist-detectable=true
 hostname linguist-documentation=false
 hostname linguist-language=TEXT
+
+LICENSE linguist-detectable=true
+LICENSE linguist-documentation=false
+LICENSE linguist-language=TEXT
