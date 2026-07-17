@@ -105,6 +105,9 @@ local VER_GAMES  = "v0.8"
 -- Kategoria: gaming-cli (edycja --gaming)
 local VER_GAMING = "v0.2"
 
+-- Kategoria: hammer (edycja --atomic)
+local VER_HAMMER = "v0.5.0"
+
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
 -- =====================================================================
@@ -126,10 +129,12 @@ local HNM_SKEL_DIR       = HACKEROS_SKEL .. "/hnm"
 local USR_LIB            = "config/includes.chroot_after_packages/usr/lib"
 local USR_LOCAL_BIN      = "config/includes.chroot_after_packages/usr/local/bin"
 local USR_LIBEXEC        = "config/includes.chroot_after_packages/usr/libexec"
+local ETC_HAMMER_DIR     = "config/includes.chroot_after_packages/etc/hammer"
 
 local PACKAGES_CHROOT    = "config/packages.chroot"
 
 local LANG_TMP           = "/tmp/Hacker-Lang"
+local HAMMER_TMP         = "/tmp/HackerOS-Hammer"
 
 local CONFIG_DIR         = "config"
 local GAMING_HELPERS_SRC = "helpers/gaming"
@@ -137,49 +142,97 @@ local GAMING_HELPERS_SRC = "helpers/gaming"
 -- =====================================================================
 -- DEFINICJE EDYCJI (FLAG WIERSZA POLECEŃ)
 -- =====================================================================
--- Każda edycja to jedna flaga --nazwa. Dla edycji w pełni obsługiwanych
--- (obecnie tylko "gaming") podajemy build_script - skrypt Lua, który
--- zostanie uruchomiony zamiast domyślnego build/build-hackeros.
--- Edycje oznaczone placeholder = true nie mają jeszcze własnej logiki -
--- zostaną rozbudowane w przyszłości. Na razie zachowują się jak build
--- domyślny (z samą informacją w logu), tak aby flagi dało się już
--- podawać bez błędu.
+-- Każda edycja to jedna flaga --nazwa.
+--
+-- Pola:
+--   build_script - skrypt Lua uruchamiany na końcu zamiast domyślnego
+--                   build/build-hackeros (jeśli nie podano, używany jest
+--                   domyślny skrypt).
+--   placeholder  - jeśli true, edycja nie ma jeszcze własnej logiki i
+--                   zachowuje się jak build domyślny (z informacją w logu).
+--   pre_build    - nazwa dodatkowego kroku (funkcji) wykonywanego po
+--                   wszystkich standardowych krokach, a przed
+--                   uruchomieniem skryptu budującego. Klucz odnosi się do
+--                   wpisu w tabeli EDITION_PRE_BUILD zdefiniowanej niżej.
 
 local EDITIONS = {
     gaming = {
         build_script = "build/build-hackeros-gaming",
         placeholder  = false,
     },
-    cybersecurity            = { placeholder = true },
-    blue                     = { placeholder = true },
-    hwde                     = { placeholder = true },
-    hydra                    = { placeholder = true },
-    ["cybersecurity-default"] = { placeholder = true },
-    lts                      = { placeholder = true },
-    gnome                    = { placeholder = true },
-    xfce                     = { placeholder = true },
-    atomic                   = { placeholder = true },
+    blue = {
+        build_script = "build/build-hackeros-blue",
+        placeholder  = false,
+    },
+    hwde = {
+        build_script = "build/build-hackeros-hwde",
+        placeholder  = false,
+    },
+    hydra = {
+        build_script = "build/build-hackeros-hydra",
+        placeholder  = false,
+        pre_build    = "hydra",
+    },
+    lts = {
+        build_script = "build/build-hackeros-lts",
+        placeholder  = false,
+        pre_build    = "lts",
+    },
+    gnome = {
+        build_script = "build/build-hackeros",
+        placeholder  = false,
+        pre_build    = "gnome",
+    },
+    xfce = {
+        build_script = "build/build-hackeros-xfce",
+        placeholder  = false,
+        pre_build    = "xfce",
+    },
+    atomic = {
+        build_script = "build/build-hackeros",
+        placeholder  = false,
+        pre_build    = "atomic",
+    },
+    nvidia = {
+        placeholder  = false,
+        pre_build    = "nvidia",
+    },
+    -- Edycje cybersecurity / cybersecurity-default nie są budowane na
+    -- branchu "official" - ich skrypty budujące (build-hackeros-cybersecurity*)
+    -- żyją na branchu "cybersecurity", stąd workflow CI dla tych edycji
+    -- checkoutuje osobny branch (patrz .github/workflows/build.yml).
+    cybersecurity = {
+        build_script = "build/build-hackeros-cybersecurity",
+        placeholder  = false,
+    },
+    ["cybersecurity-default"] = {
+        build_script = "build/build-hackeros-cybersecurity-default",
+        placeholder  = false,
+    },
 }
 
 local function print_help()
     io.write([[
 Użycie: lua5.5 build.lua [FLAGA]
 
-Bez flagi - standardowy build HackerOS.
+Bez flagi - standardowy build HackerOS (official).
 
 Dostępne flagi edycji (można podać tylko jedną naraz):
   --gaming                 Edycja gamingowa (helpers/gaming, gaming-cli,
                             build/build-hackeros-gaming, bez HackerOS-Steam)
-  --cybersecurity           (placeholder - w przygotowaniu)
-  --blue                    (placeholder - w przygotowaniu)
-  --hwde                    (placeholder - w przygotowaniu)
-  --hydra                   (placeholder - w przygotowaniu)
-  --cybersecurity-default   (placeholder - w przygotowaniu)
-  --lts                     (placeholder - w przygotowaniu)
-  --gnome                   (placeholder - w przygotowaniu)
-  --xfce                    (placeholder - w przygotowaniu)
-  --atomic                  (placeholder - w przygotowaniu)
-  --help                    Wyświetla tę pomoc
+  --blue                    Edycja Blue (build/build-hackeros-blue)
+  --hwde                    Edycja HWDE (build/build-hackeros-hwde)
+  --hydra                    Edycja Hydra (helpers/hydra, build/build-hackeros-hydra)
+  --lts                      Edycja LTS (helpers/lts, build/build-hackeros-lts)
+  --gnome                    Edycja GNOME (helpers/gnome)
+  --xfce                     Edycja XFCE (helpers/xfce, build/build-hackeros-xfce)
+  --atomic                   Edycja Atomic (Hammer zamiast HackerOS-Store, helpers/atomic)
+  --nvidia                   Dodatek NVIDIA (helpers/NVIDIA)
+  --cybersecurity            Edycja Cybersecurity (branch cybersecurity,
+                              build/build-hackeros-cybersecurity)
+  --cybersecurity-default    Edycja Cybersecurity Default (branch cybersecurity,
+                              build/build-hackeros-cybersecurity-default)
+  --help                     Wyświetla tę pomoc
 
 ]])
 end
@@ -546,18 +599,31 @@ local function step_chmod_static_files()
 end
 
 -- =====================================================================
+-- FUNKCJA POMOCNICZA: KOPIOWANIE KATALOGU helpers/<edycja> DO config/
+-- =====================================================================
+
+-- Kopiuje całą zawartość podanego katalogu helperów do config/.
+-- use_sudo == true -> polecenie jest poprzedzone "sudo" (zgodnie z
+-- wymaganiami niektórych edycji).
+local function copy_helper_dir(src, use_sudo)
+    heading("Kopiowanie " .. src .. " do config/")
+
+    if isdir(src) then
+        mkdirp(CONFIG_DIR)
+        local prefix = use_sudo and "sudo " or ""
+        sh(prefix .. "cp -r " .. quote(src) .. "/. " .. quote(CONFIG_DIR))
+    else
+        io.write("Ostrzeżenie: Nie znaleziono katalogu " .. src .. "\n")
+    end
+end
+
+-- =====================================================================
 -- KROK 15 (TYLKO --gaming): KOPIOWANIE helpers/gaming/* DO config/
 -- =====================================================================
 
 local function step_copy_gaming_helpers()
     heading("Tryb --gaming: kopiowanie helpers/gaming do config/")
-
-    if isdir(GAMING_HELPERS_SRC) then
-        mkdirp(CONFIG_DIR)
-        sh("cp -r " .. quote(GAMING_HELPERS_SRC) .. "/. " .. quote(CONFIG_DIR))
-    else
-        io.write("Ostrzeżenie: Nie znaleziono katalogu " .. GAMING_HELPERS_SRC .. "\n")
-    end
+    copy_helper_dir(GAMING_HELPERS_SRC, false)
 end
 
 -- =====================================================================
@@ -581,13 +647,110 @@ local function step_download_gaming_cli_tools()
 end
 
 -- =====================================================================
+-- DODATKOWE KROKI PRE-BUILD DLA POSZCZEGÓLNYCH EDYCJI
+-- =====================================================================
+
+-- --hydra: kopiowanie helpers/hydra do config/ (bez sudo)
+local function step_hydra_pre_build()
+    heading("Tryb --hydra: dodatkowe operacje")
+    copy_helper_dir("helpers/hydra", false)
+end
+
+-- --lts: kopiowanie helpers/lts do config/ (sudo cp -r)
+local function step_lts_pre_build()
+    heading("Tryb --lts: dodatkowe operacje")
+    copy_helper_dir("helpers/lts", true)
+end
+
+-- --gnome: kopiowanie helpers/gnome do config/ (sudo cp -r)
+local function step_gnome_pre_build()
+    heading("Tryb --gnome: dodatkowe operacje")
+    copy_helper_dir("helpers/gnome", true)
+end
+
+-- --xfce: kopiowanie helpers/xfce do config/ (sudo cp -r)
+local function step_xfce_pre_build()
+    heading("Tryb --xfce: dodatkowe operacje")
+    copy_helper_dir("helpers/xfce", true)
+end
+
+-- --nvidia: kopiowanie helpers/NVIDIA do config/ (bez sudo)
+local function step_nvidia_pre_build()
+    heading("Tryb --nvidia: dodatkowe operacje")
+    copy_helper_dir("helpers/NVIDIA", false)
+end
+
+-- --atomic: klonowanie hammer i przeniesienie repo-HackerOS do /etc/hammer
+local function step_atomic_hammer_repo()
+    heading("Tryb --atomic: klonowanie hammer i przenoszenie repo-HackerOS do /etc/hammer")
+
+    clone("https://github.com/HackerOS-Linux-System/hammer.git", HAMMER_TMP)
+
+    local src_dir = HAMMER_TMP .. "/repo-HackerOS"
+
+    if isdir(src_dir) then
+        mkdirp(ETC_HAMMER_DIR)
+        sh("mv " .. quote(src_dir) .. " " .. quote(ETC_HAMMER_DIR .. "/repo-HackerOS"))
+    else
+        io.write("Ostrzeżenie: Nie znaleziono katalogu " .. src_dir .. " w sklonowanym repo hammer\n")
+    end
+
+    rmrf(HAMMER_TMP)
+end
+
+-- --atomic: usunięcie HackerOS-Store.desktop, instalacja Hammer/Hammer-Store,
+-- plik .desktop Hammer Store, repo-HackerOS w /etc/hammer, helpers/atomic.
+local function step_atomic_pre_build()
+    heading("Tryb --atomic: dodatkowe operacje")
+
+    -- Usunięcie HackerOS-Store.desktop (zastępowanego przez Hammer Store)
+    local store_desktop = APPLICATIONS_DIR .. "/HackerOS-Store.desktop"
+    if exists(store_desktop) then
+        sh("rm -f " .. quote(store_desktop))
+    else
+        io.write("Ostrzeżenie: Nie znaleziono pliku " .. store_desktop .. "\n")
+    end
+
+    -- Binarki hammer / hammer-store
+    mkdirp(TARGET_BIN)
+    for _, name in ipairs({ "hammer", "hammer-store" }) do
+        local url  = "https://github.com/HackerOS-Linux-System/hammer/releases/download/" ..
+                     VER_HAMMER .. "/" .. name
+        local dest = TARGET_BIN .. "/" .. name
+        download(url, dest)
+        chmodx(dest)
+    end
+
+    -- Plik .desktop dla Hammer Store (adres "blob" zamieniony na raw.githubusercontent.com)
+    mkdirp(APPLICATIONS_DIR)
+    local desktop_url = "https://raw.githubusercontent.com/HackerOS-Linux-System/hammer/main/store/data/org.hackerOS.HammerStore.desktop"
+    download(desktop_url, APPLICATIONS_DIR .. "/org.hackerOS.HammerStore.desktop")
+
+    -- repo-HackerOS z klonu hammer -> /etc/hammer
+    step_atomic_hammer_repo()
+
+    -- helpers/atomic -> config/
+    copy_helper_dir("helpers/atomic", false)
+end
+
+-- Tabela dowiązująca klucz pre_build z EDITIONS do konkretnej funkcji.
+local EDITION_PRE_BUILD = {
+    hydra  = step_hydra_pre_build,
+    lts    = step_lts_pre_build,
+    gnome  = step_gnome_pre_build,
+    xfce   = step_xfce_pre_build,
+    nvidia = step_nvidia_pre_build,
+    atomic = step_atomic_pre_build,
+}
+
+-- =====================================================================
 -- KROK 17: URUCHOMIENIE SKRYPTU BUDUJĄCEGO SYSTEM
 -- =====================================================================
 
 -- Wybiera skrypt budujący zależnie od edycji: dla edycji w pełni
--- obsługiwanych (np. gaming) używa build_script z EDITIONS; dla edycji
--- placeholder (jeszcze nieobsłużonych) i dla builda domyślnego używa
--- build/build-hackeros.
+-- obsługiwanych (np. gaming, blue, hwde, hydra, lts, xfce) używa
+-- build_script z EDITIONS; dla edycji placeholder (jeszcze nieobsłużonych)
+-- i dla builda domyślnego używa build/build-hackeros.
 local function step_run_build(edition)
     local info = edition and EDITIONS[edition]
     local build_script = "build/build-hackeros"
@@ -644,6 +807,11 @@ local function main()
     if edition == "gaming" then
         step_copy_gaming_helpers()
         step_download_gaming_cli_tools()
+    end
+
+    local pre_build_fn = edition and EDITION_PRE_BUILD[edition]
+    if pre_build_fn then
+        pre_build_fn()
     end
 
     step_run_build(edition)
