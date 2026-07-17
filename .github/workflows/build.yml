@@ -5,10 +5,11 @@ on:
       edition:
         description: "Edycja HackerOS do zbudowania (tylko przy ręcznym uruchomieniu)"
         required: false
-        default: "default"
+        default: "official"
         type: choice
         options:
-          - default
+          - official
+          - all
           - gaming
           - cybersecurity
           - blue
@@ -19,8 +20,9 @@ on:
           - gnome
           - xfce
           - atomic
+          - nvidia
   push:
-    branches: [ "official" ]
+    branches: [ "official", "cybersecurity" ]
 env:
   # Wersja Lua do zbudowania ze źródeł (na dzień pisania tego workflow Lua 5.5
   # nie ma jeszcze paczki w repozytoriach Ubuntu, więc kompilujemy ją ręcznie).
@@ -34,15 +36,35 @@ jobs:
       - name: Wyznaczenie listy edycji do zbudowania
         id: set-matrix
         run: |
+          # Edycje "official" - ich skrypty build-hackeros* żyją na branchu "official".
+          OFFICIAL_EDITIONS='["official","gaming","blue","hwde","hydra","lts","gnome","xfce","atomic","nvidia"]'
+          # Edycje "cybersecurity" - ich skrypty build-hackeros-cybersecurity*
+          # żyją na branchu "cybersecurity", więc budujemy je z tamtego brancha.
+          CYBERSECURITY_EDITIONS='["cybersecurity","cybersecurity-default"]'
+          ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic","nvidia"]'
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             EDITION="${{ github.event.inputs.edition }}"
             if [ -z "$EDITION" ]; then
-              EDITION="default"
+              EDITION="official"
             fi
-            echo "editions=[\"$EDITION\"]" >> "$GITHUB_OUTPUT"
+
+            if [ "$EDITION" = "all" ]; then
+              # Opcja "all" - buduje każdą edycję osobno, każda na czystym
+              # (świeżym) środowisku runnera, jedna po drugiej. Edycje
+              # cybersecurity* są mimo to checkoutowane z brancha
+              # "cybersecurity" (patrz krok Checkout w jobie build).
+              echo "editions=$ALL_EDITIONS" >> "$GITHUB_OUTPUT"
+            else
+              echo "editions=[\"$EDITION\"]" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "${{ github.ref_name }}" = "cybersecurity" ]; then
+            # Push na branch "cybersecurity" - budujemy tylko edycje cybersecurity.
+            echo "editions=$CYBERSECURITY_EDITIONS" >> "$GITHUB_OUTPUT"
           else
-            # Push na branch "official" - budujemy wszystkie edycje.
-            echo 'editions=["default","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic"]' >> "$GITHUB_OUTPUT"
+            # Push na branch "official" - budujemy wszystkie edycje "official"
+            # (cybersecurity* budują się wyłącznie z brancha "cybersecurity").
+            echo "editions=$OFFICIAL_EDITIONS" >> "$GITHUB_OUTPUT"
           fi
   build:
     needs: setup
@@ -50,11 +72,21 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
+      # Każda edycja buduje się na osobnym, czystym runnerze GitHub Actions
+      # (świeże środowisko dla każdej pozycji macierzy), więc kolejne
+      # buildy nie dziedziczą żadnego stanu po poprzednich.
       matrix:
         edition: ${{ fromJson(needs.setup.outputs.editions) }}
     steps:
       - name: Checkout repozytorium
         uses: actions/checkout@v4
+        with:
+          # Edycje cybersecurity / cybersecurity-default mają swoje skrypty
+          # build-hackeros-cybersecurity* wyłącznie na branchu "cybersecurity",
+          # więc dla nich checkoutujemy ten branch niezależnie od tego, co
+          # wywołało workflow. Dla pozostałych edycji używamy brancha/commita,
+          # który wyzwolił bieżący workflow run.
+          ref: ${{ (matrix.edition == 'cybersecurity' || matrix.edition == 'cybersecurity-default') && 'cybersecurity' || github.ref }}
       - name: Aktualizacja listy pakietów
         run: sudo apt-get update
       - name: Instalacja podstawowych narzędzi
@@ -103,7 +135,7 @@ jobs:
       - name: Uruchomienie build.lua (edycja - ${{ matrix.edition }})
         run: |
           chmod +x build.lua
-          if [ "${{ matrix.edition }}" = "default" ]; then
+          if [ "${{ matrix.edition }}" = "official" ]; then
             lua5.5 build.lua
           else
             lua5.5 build.lua --${{ matrix.edition }}
