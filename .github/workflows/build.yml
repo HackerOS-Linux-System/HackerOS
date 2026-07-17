@@ -115,7 +115,14 @@ jobs:
           make linux -j"$(nproc)"
           sudo make install
           cd ..
-          lua5.5 -v || lua -v
+          # Domyślny "make install" Lua instaluje binarki jako `lua`/`luac`
+          # (bez numeru wersji), a nasz workflow oraz build.lua wywołują
+          # jawnie `lua5.5`. Tworzymy symlinki, żeby `lua5.5`/`luac5.5`
+          # wskazywały na świeżo zbudowaną instalację.
+          sudo ln -sf "$(command -v lua)" /usr/local/bin/lua5.5
+          sudo ln -sf "$(command -v luac)" /usr/local/bin/luac5.5
+          hash -r
+          lua5.5 -v
       - name: Instalacja live-build i narzędzi do tworzenia obrazu ISO
         run: |
           sudo apt-get install -y --no-install-recommends \
