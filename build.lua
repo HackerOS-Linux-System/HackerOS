@@ -495,7 +495,7 @@ local function step_download_games()
     mkdirp(GAMES_DIR)
 
     local files = {
-        "bark-squadron.AppImage",
+        "bark-squadron",
         "bit-jump.love",
         "cosmonaut.love",
         "HackerOS-Games",
