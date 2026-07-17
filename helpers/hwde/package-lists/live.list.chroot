@@ -3,6 +3,7 @@ live-config
 live-config-systemd
 systemd-sysv
 
+dbus-user-session
 seatd
 sddm
 
