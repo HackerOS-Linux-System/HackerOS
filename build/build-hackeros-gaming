@@ -169,7 +169,8 @@ local function main()
         '--apt-options "--allow-unauthenticated --yes" ' ..
         "--firmware-chroot true " ..
         '--linux-flavours "none" ' ..
-        '--linux-packages "none"'
+        '--linux-packages "none" ' ..
+        "--security false"
     )
 
     sh(
