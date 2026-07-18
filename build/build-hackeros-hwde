@@ -54,6 +54,3 @@ sh(
 
 -- Budowa obrazu
 sh("sudo lb build")
-
--- Czyszczenie po buildzie
-sh("sudo lb clean --purge")
