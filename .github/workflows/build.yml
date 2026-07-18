@@ -94,7 +94,7 @@ jobs:
       - name: Odczyt wersji z config.hk
         id: version
         run: |
-          VERSION=$(awk -F'=>' '/^[[:space:]]*version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $2); print $2 }' config.hk | head -n1)
+          VERSION=$(awk -F'=>' '/version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $NF); print $NF }' config.hk | head -n1)
           if [ -z "$VERSION" ]; then
             echo "Nie udało się odczytać wersji z ./config.hk (oczekiwany format: 'version => X.Y' pod [metadata])" >&2
             exit 1
@@ -210,7 +210,7 @@ jobs:
       - name: Odczyt wersji z config.hk
         id: version
         run: |
-          VERSION=$(awk -F'=>' '/^[[:space:]]*version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $2); print $2 }' config.hk | head -n1)
+          VERSION=$(awk -F'=>' '/version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $NF); print $NF }' config.hk | head -n1)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Pobranie wszystkich zbudowanych obrazów ISO
         uses: actions/download-artifact@v4
