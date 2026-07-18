@@ -32,7 +32,12 @@ sh(
     -- trafiają do testing zwykłą drogą przez main). Wyłączamy tylko
     -- security, --updates (deb.debian.org forky-updates) zostaje
     -- włączone, więc firmware/non-free-firmware nie jest ruszane.
-    "--security false"
+    "--security false " ..
+    -- lb_chroot_archives (import kluczy dla config/archives/*) odpala się
+    -- zaraz po debootstrapie, zanim "gnupg" zostanie zainstalowane z
+    -- głównej listy pakietów - stąd "env: 'gpg': No such file or
+    -- directory". Dograjmy gnupg już na etapie debootstrapu.
+    '--debootstrap-options "--include=gnupg"'
 )
 
 -- Budowa obrazu
