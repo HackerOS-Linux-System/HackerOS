@@ -123,10 +123,9 @@ jobs:
           sudo ln -sf "$(command -v luac)" /usr/local/bin/luac5.5
           hash -r
           lua5.5 -v
-      - name: Instalacja live-build i narzędzi do tworzenia obrazu ISO
+      - name: Instalacja live-build (najnowsza wersja ze źródeł Debian Live Team) i narzędzi do tworzenia obrazu ISO
         run: |
           sudo apt-get install -y --no-install-recommends \
-            live-build \
             debootstrap \
             squashfs-tools \
             xorriso \
@@ -138,7 +137,25 @@ jobs:
             grub-pc-bin \
             grub-efi-amd64-bin \
             grub-efi-ia32-bin \
-            mtd-utils
+            mtd-utils \
+            build-essential \
+            devscripts \
+            debhelper \
+            po4a
+          # Pakiet "live-build" z repozytoriów Ubuntu jest zamrożony na
+          # bardzo starej gałęzi 3.0~a57 (z ok. 2012 roku) i nie ma wielu
+          # opcji obecnych w aktualnym live-build (np. --debootstrap-options).
+          # Budujemy najnowszą wersję wprost ze źródeł Debian Live Team
+          # (ta sama gałąź, z której pochodzi pakiet w Debianie - obecnie
+          # w testing/unstable), żeby mieć aktualne zachowanie i opcje.
+          rm -rf /tmp/live-build-src
+          git clone --depth 1 https://salsa.debian.org/live-team/live-build.git /tmp/live-build-src
+          cd /tmp/live-build-src
+          dpkg-buildpackage -b -uc -us
+          cd ..
+          sudo apt-get remove -y live-build || true
+          sudo dpkg -i live-build_*.deb
+          lb --version
       - name: Uruchomienie build.lua (edycja - ${{ matrix.edition }})
         run: |
           chmod +x build.lua
