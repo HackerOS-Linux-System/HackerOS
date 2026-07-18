@@ -26,7 +26,13 @@ sh(
     "--distribution forky " ..
     "--architectures amd64 " ..
     '--apt-options "--allow-unauthenticated --yes" ' ..
-    "--firmware-chroot true"
+    "--firmware-chroot true " ..
+    -- forky to wciąż Debian testing - security.debian.org nie prowadzi
+    -- jeszcze dla niego gałęzi forky/updates (poprawki bezpieczeństwa
+    -- trafiają do testing zwykłą drogą przez main). Wyłączamy tylko
+    -- security, --updates (deb.debian.org forky-updates) zostaje
+    -- włączone, więc firmware/non-free-firmware nie jest ruszane.
+    "--security false"
 )
 
 -- Budowa obrazu
