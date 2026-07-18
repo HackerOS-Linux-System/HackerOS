@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       editions: ${{ steps.set-matrix.outputs.editions }}
+      edition_input: ${{ steps.set-matrix.outputs.edition_input }}
     steps:
       - name: Wyznaczenie listy edycji do zbudowania
         id: set-matrix
@@ -42,6 +43,9 @@ jobs:
           # żyją na branchu "cybersecurity", więc budujemy je z tamtego brancha.
           CYBERSECURITY_EDITIONS='["cybersecurity","cybersecurity-default"]'
           ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic","nvidia"]'
+
+          EDITION_INPUT="${{ github.event.inputs.edition }}"
+          echo "edition_input=$EDITION_INPUT" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             EDITION="${{ github.event.inputs.edition }}"
@@ -87,6 +91,16 @@ jobs:
           # wywołało workflow. Dla pozostałych edycji używamy brancha/commita,
           # który wyzwolił bieżący workflow run.
           ref: ${{ (matrix.edition == 'cybersecurity' || matrix.edition == 'cybersecurity-default') && 'cybersecurity' || github.ref }}
+      - name: Odczyt wersji z config.hk
+        id: version
+        run: |
+          VERSION=$(awk -F'=>' '/^[[:space:]]*version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $2); print $2 }' config.hk | head -n1)
+          if [ -z "$VERSION" ]; then
+            echo "Nie udało się odczytać wersji z ./config.hk (oczekiwany format: 'version => X.Y' pod [metadata])" >&2
+            exit 1
+          fi
+          echo "Wersja odczytana z config.hk: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Aktualizacja listy pakietów
         run: sudo apt-get update
       - name: Instalacja podstawowych narzędzi
@@ -169,10 +183,49 @@ jobs:
         id: find_iso
         run: |
           echo "iso_found=$(find . -maxdepth 3 -iname '*.iso' | head -n1)" >> "$GITHUB_OUTPUT"
+      - name: Zmiana nazwy obrazu ISO
+        id: rename_iso
+        if: steps.find_iso.outputs.iso_found != ''
+        run: |
+          SRC="${{ steps.find_iso.outputs.iso_found }}"
+          DEST="HackerOS-V${{ steps.version.outputs.version }}-${{ matrix.edition }}.iso"
+          mv -- "$SRC" "$DEST"
+          echo "Zmieniono nazwę: $SRC -> $DEST"
+          echo "iso_path=$DEST" >> "$GITHUB_OUTPUT"
       - name: Wgranie ISO jako artefaktu builda
         if: steps.find_iso.outputs.iso_found != ''
         uses: actions/upload-artifact@v4
         with:
-          name: hackeros-iso-${{ matrix.edition }}
-          path: "**/*.iso"
+          name: HackerOS-V${{ steps.version.outputs.version }}-${{ matrix.edition }}
+          path: ${{ steps.rename_iso.outputs.iso_path }}
           if-no-files-found: warn
+
+  package-all:
+    needs: [setup, build]
+    if: needs.setup.outputs.edition_input == 'all'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repozytorium (do odczytu wersji z config.hk)
+        uses: actions/checkout@v4
+      - name: Odczyt wersji z config.hk
+        id: version
+        run: |
+          VERSION=$(awk -F'=>' '/^[[:space:]]*version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $2); print $2 }' config.hk | head -n1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Pobranie wszystkich zbudowanych obrazów ISO
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "HackerOS-V*-*"
+          path: all-isos
+          merge-multiple: true
+      - name: Spakowanie wszystkich ISO do jednego archiwum ZIP
+        run: |
+          cd all-isos
+          ls -la
+          zip -X "../HackerOS-V${{ steps.version.outputs.version }}-all.zip" *.iso
+      - name: Wgranie zbiorczego archiwum ZIP jako artefaktu builda
+        uses: actions/upload-artifact@v4
+        with:
+          name: HackerOS-V${{ steps.version.outputs.version }}-all
+          path: HackerOS-V${{ steps.version.outputs.version }}-all.zip
+          if-no-files-found: error
