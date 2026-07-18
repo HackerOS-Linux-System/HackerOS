@@ -48,7 +48,8 @@ sh(
     "--distribution forky " ..
     "--architectures amd64 " ..
     '--apt-options "--allow-unauthenticated --yes" ' ..
-    "--firmware-chroot true"
+    "--firmware-chroot true " ..
+    "--security false"
 )
 
 -- Budowa obrazu
