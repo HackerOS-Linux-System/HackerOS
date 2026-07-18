@@ -170,7 +170,8 @@ local function main()
         "--firmware-chroot true " ..
         '--linux-flavours "none" ' ..
         '--linux-packages "none" ' ..
-        "--security false"
+        "--security false " ..
+        '--debootstrap-options "--include=gnupg"'
     )
 
     sh(
