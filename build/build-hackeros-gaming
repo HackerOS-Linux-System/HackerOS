@@ -192,7 +192,6 @@ local function main()
     write_xanmod_hook()
 
     sh("sudo lb build")
-    sh("sudo lb clean --purge")
 
     io.write("\n==> Gotowe! ISO jest w /home/michal-hackeros/Pobrane/\n")
 end
