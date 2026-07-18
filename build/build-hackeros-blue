@@ -84,7 +84,8 @@ sh(
     "--architectures amd64 " ..
     '--apt-options "--allow-unauthenticated --yes" ' ..
     "--firmware-chroot true " ..
-    "--security false"
+    "--security false " ..
+    '--debootstrap-options "--include=gnupg"'
 )
 
 -- Budowa obrazu
