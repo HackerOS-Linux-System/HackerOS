@@ -127,6 +127,7 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends \
             debootstrap \
+            debian-archive-keyring \
             squashfs-tools \
             xorriso \
             isolinux \
