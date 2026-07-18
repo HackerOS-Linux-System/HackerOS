@@ -1,1 +1,1 @@
-sudo apt remove --purge plymouth* konsole*
+sudo apt remove --purge -y plymouth* konsole*
