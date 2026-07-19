@@ -7,6 +7,7 @@ haruna
 flatpak
 snapd
 python3.13-venv
+ruby
 curl
 wget
 git
