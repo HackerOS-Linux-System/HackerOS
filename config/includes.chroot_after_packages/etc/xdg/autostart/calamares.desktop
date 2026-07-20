@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Calamares Installer
+Exec=/usr/share/HackerOS/Scripts/calamres.sh
+Icon=/usr/share/HackerOS/ICONS/HackerOS-Download-Icon.png
+X-GNOME-Autostart-enabled=true
