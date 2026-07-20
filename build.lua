@@ -278,9 +278,14 @@ local function step_clone_updates_repo()
     mkdirp(TARGET_APPS)
     mkdirp(TARGET_BIN)
 
-    heading("Kopiowanie tapet i katalogu HackerOS")
-    if isdir(REPO_TMP .. "/wallpaper-updates/wallpapers") then
-        sh("cp -r " .. quote(REPO_TMP .. "/wallpaper-updates/wallpapers") .. "/. " .. quote(TARGET_SHARE))
+    heading("Kopiowanie tapet (wallpaper-updates/wallpapers) i katalogu HackerOS")
+    local wallpapers_src = REPO_TMP .. "/wallpaper-updates/wallpapers"
+    if isdir(wallpapers_src) then
+        -- Kopiujemy cały katalog "wallpapers" (a nie tylko jego zawartość),
+        -- żeby w TARGET_SHARE powstał podkatalog usr/share/wallpapers.
+        sh("cp -r " .. quote(wallpapers_src) .. " " .. quote(TARGET_SHARE))
+    else
+        io.write("Ostrzeżenie: Nie znaleziono katalogu " .. wallpapers_src .. "\n")
     end
 
     if isdir(REPO_TMP .. "/HackerOS") then
@@ -354,7 +359,9 @@ end
 local function step_extract_archives()
     heading("Rozpakowywanie archiwów")
 
-    local zsh_archive = ETC_SKEL .. "/.config/.oh-my-zsh.tar.gz"
+    -- Uwaga: plik w repozytorium nazywa się "oh-my-zsh.tar.gz" (bez kropki
+    -- na początku nazwy), mimo że trafia do katalogu ukrytego .config.
+    local zsh_archive = ETC_SKEL .. "/.config/oh-my-zsh.tar.gz"
     if exists(zsh_archive) then
         sh("tar -xzf " .. quote(zsh_archive) .. " -C " .. quote(ETC_SKEL .. "/.config"))
         sh("rm " .. quote(zsh_archive))
@@ -375,6 +382,15 @@ end
 -- KROK 5: KOPIOWANIE PLIKÓW .desktop
 -- =====================================================================
 
+-- Pliki .desktop, które trafiają razem z resztą do APPLICATIONS_DIR, ale
+-- mają zostać z niego usunięte (np. bo odpowiadające im aplikacje nie są
+-- (jeszcze) częścią tego builda).
+local DESKTOP_FILES_TO_REMOVE = {
+    "hdev.desktop",
+    "HackerOS-Studio.desktop",
+    "HackerOS-System-Monitor.desktop",
+}
+
 local function step_copy_desktop_files()
     heading("Kopiowanie plików .desktop do usr/share/applications")
 
@@ -385,6 +401,16 @@ local function step_copy_desktop_files()
            " 2>/dev/null || true", true)
     else
         io.write("Ostrzeżenie: Nie znaleziono katalogu " .. desktop_src .. "\n")
+    end
+
+    heading("Usuwanie niechcianych plików .desktop z usr/share/applications")
+    for _, name in ipairs(DESKTOP_FILES_TO_REMOVE) do
+        local path = APPLICATIONS_DIR .. "/" .. name
+        if exists(path) then
+            sh("rm -f " .. quote(path))
+        else
+            io.write("Ostrzeżenie: Nie znaleziono pliku do usunięcia: " .. path .. "\n")
+        end
     end
 end
 
