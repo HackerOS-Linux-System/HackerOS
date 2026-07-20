@@ -9,7 +9,7 @@
 
 %TIP%
 
-- [Report an error](https://github.com/HackerOS-Linux-System/HackerOS-Website/issues)
+- [Report an error](https://github.com/HackerOS-Linux-System/HackerOS/issues)
 - [Discussions](https://github.com/orgs/HackerOS-Linux-System/discussions)
 - [Discord](https://discord.com/invite/8yHNcBaEKy)
 - [Reddit](https://www.reddit.com/r/HackerOS_/)
