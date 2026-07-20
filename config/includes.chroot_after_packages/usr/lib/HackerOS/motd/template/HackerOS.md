@@ -4,7 +4,7 @@
 |-----------------------|--------------------------|
 | `hacker`              | Command list             |
 | `hacker disable motd` | Disable motd             |
-| `hlh`                 | About Hacker Lang        |
+| `hl`                 | Use Hacker Lang          |
 | `hacker unpack`       | Install custom software  |
 
 %TIP%
