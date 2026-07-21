@@ -139,6 +139,18 @@ local HAMMER_TMP         = "/tmp/HackerOS-Hammer"
 local CONFIG_DIR         = "config"
 local GAMING_HELPERS_SRC = "helpers/gaming"
 
+-- Nasza własna grafika (marka HackerOS), podmieniana na miejscu domyślnego
+-- tła bootloadera live-build (patrz step_apply_boot_splash niżej).
+local OUR_SPLASH         = "packages/splash.svg"
+
+-- Katalog, w którym live-build trzyma szablony bootloaderów po
+-- zainstalowaniu pakietu (patrz: dpkg -L live-build | grep bootloaders).
+local LB_BOOTLOADERS_DIR = "/usr/share/live/build/bootloaders"
+
+-- Główny, wspólny plik źródłowy tła (isolinux/syslinux + grub-pc/grub-efi
+-- korzystają z niego podczas konwersji do właściwych formatów przy "lb build").
+local SYSTEM_SPLASH      = LB_BOOTLOADERS_DIR .. "/splash.svg"
+
 -- =====================================================================
 -- DEFINICJE EDYCJI (FLAG WIERSZA POLECEŃ)
 -- =====================================================================
@@ -770,6 +782,111 @@ local EDITION_PRE_BUILD = {
 }
 
 -- =====================================================================
+-- KROK 16.5: PODMIANA TŁA BOOTLOADERA (splash.svg) NA GRAFIKĘ HackerOS
+-- =====================================================================
+
+-- Podmienia domyślny plik splash.svg zaszyty w plikach systemowych
+-- pakietu live-build (/usr/share/live/build/bootloaders/splash.svg) na
+-- własną grafikę HackerOS (packages/splash.svg).
+--
+-- Skąd bierze się domyślne tło: pakiet live-build trzyma jeden wspólny
+-- plik źródłowy splash.svg, z którego w trakcie etapu "lb binary" są
+-- generowane tła w odpowiednich formatach/rozdzielczościach osobno dla
+-- każdego bootloadera (isolinux/syslinux oraz grub-pc/grub-efi). Dzięki
+-- temu wystarczy podmienić ten JEDEN plik źródłowy .svg - nie trzeba nic
+-- ręcznie przeliczać ani przerabiać na PNG/LSS w konkretnych rozdzielczościach.
+--
+-- Co ZOSTAJE bez zmian: wpisy tekstowe menu ("Live (amd64)" / "Live
+-- (amd64 failsafe)" / "Utilities"), obsługa klawiszy ENTER/TAB itd. - to
+-- wszystko żyje w osobnych plikach szablonów (menu.cfg / stdmenu.cfg /
+-- live.cfg.in) i nie jest tu ruszane. Zmienia się WYŁĄCZNIE grafika tła.
+--
+-- Musi się wykonać PO instalacji live-build (patrz krok "Instalacja
+-- live-build" w workflow CI), ale PRZED uruchomieniem właściwego builda
+-- (step_run_build), bo to on odpala "lb build", które faktycznie
+-- konwertuje splash.svg na tła dla poszczególnych bootloaderów.
+local function step_apply_boot_splash()
+    heading("Podmiana tła bootloadera (splash.svg) na grafikę HackerOS")
+
+    if not exists(OUR_SPLASH) then
+        io.stderr:write(
+            "Błąd: nie znaleziono " .. OUR_SPLASH .. " w repozytorium - " ..
+            "pomijam podmianę tła bootloadera.\n"
+        )
+        os.exit(1)
+    end
+
+    if not isdir(LB_BOOTLOADERS_DIR) then
+        io.write(
+            "Ostrzeżenie: katalog " .. LB_BOOTLOADERS_DIR .. " nie istnieje " ..
+            "(live-build nie jest jeszcze zainstalowany na tym etapie?) - " ..
+            "pomijam podmianę tła bootloadera.\n"
+        )
+        return
+    end
+
+    -- Główny plik używany przez live-build do generowania teł dla
+    -- isolinux/syslinux oraz grub-pc/grub-efi.
+    if exists(SYSTEM_SPLASH) then
+        sh("sudo cp -f " .. quote(OUR_SPLASH) .. " " .. quote(SYSTEM_SPLASH))
+        io.write("Podmieniono " .. SYSTEM_SPLASH .. " na " .. OUR_SPLASH .. "\n")
+    else
+        io.write(
+            "Ostrzeżenie: nie znaleziono " .. SYSTEM_SPLASH ..
+            " w tej wersji live-build - sprawdzam dodatkowe lokalizacje.\n"
+        )
+    end
+
+    -- Zabezpieczenie na wypadek innej wersji live-build, która trzyma
+    -- dodatkowe/osobne pliki tła per-bootloader (np. w podkatalogach
+    -- grub-pc/, grub-efi/, isolinux/, syslinux/, syslinux_common/).
+    --
+    -- Pliki *.svg podmieniamy 1:1 (to zwykła grafika wektorowa - taka
+    -- sama jak nasza). Pliki *.png NIE są nadpisywane surową zawartością
+    -- SVG (to zepsułoby plik) - próbujemy je realnie przekonwertować
+    -- narzędziem rsvg-convert/convert, jeśli jest dostępne; jeśli nie,
+    -- tylko ostrzegamy i zostawiamy oryginał bez zmian.
+    local find_svg_cmd =
+        "find " .. quote(LB_BOOTLOADERS_DIR) ..
+        " -mindepth 2 -type f -name 'splash.svg' 2>/dev/null"
+
+    local svg_handle = io.popen(find_svg_cmd)
+    if svg_handle then
+        for path in svg_handle:lines() do
+            io.write("Znaleziono dodatkowy plik tła bootloadera (svg): " .. path .. " - podmieniam\n")
+            sh("sudo cp -f " .. quote(OUR_SPLASH) .. " " .. quote(path))
+        end
+        svg_handle:close()
+    end
+
+    local find_png_cmd =
+        "find " .. quote(LB_BOOTLOADERS_DIR) ..
+        " -mindepth 2 -type f -name 'splash.png' 2>/dev/null"
+
+    local png_handle = io.popen(find_png_cmd)
+    if png_handle then
+        for path in png_handle:lines() do
+            io.write("Znaleziono dodatkowy plik tła bootloadera (png): " .. path .. "\n")
+            if os.execute("command -v rsvg-convert >/dev/null 2>&1") == true then
+                sh("rsvg-convert " .. quote(OUR_SPLASH) .. " -o /tmp/hackeros-splash.png", true)
+                sh("sudo cp -f /tmp/hackeros-splash.png " .. quote(path), true)
+            elseif os.execute("command -v convert >/dev/null 2>&1") == true then
+                sh("convert " .. quote(OUR_SPLASH) .. " /tmp/hackeros-splash.png", true)
+                sh("sudo cp -f /tmp/hackeros-splash.png " .. quote(path), true)
+            else
+                io.write(
+                    "Ostrzeżenie: brak rsvg-convert/convert - nie mogę " ..
+                    "przekonwertować " .. OUR_SPLASH .. " do PNG, pomijam " .. path .. "\n"
+                )
+            end
+        end
+        png_handle:close()
+    end
+
+    io.write("Podmiana tła bootloadera zakończona.\n")
+end
+
+-- =====================================================================
 -- KROK 17: URUCHOMIENIE SKRYPTU BUDUJĄCEGO SYSTEM
 -- =====================================================================
 
@@ -840,6 +957,7 @@ local function main()
         pre_build_fn()
     end
 
+    step_apply_boot_splash()
     step_run_build(edition)
 end
 
