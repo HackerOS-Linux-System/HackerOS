@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+# Ustawia motyw Plymouth "spinner" jako domyślny zamiast domyślnego
+# motywu Debiana, zarówno na starcie systemu, jak i przy jego
+# wyłączaniu/restarcie (theme spinner obsługuje sekcje [boot-up],
+# [shutdown] i [reboot] w swoim pliku spinner.plymouth).
+#
+# Same pliki motywu (grafiki + spinner.plymouth) są dostarczane przez
+# config/includes.chroot_after_packages/usr/share/plymouth/themes/spinner/
+# - ten hook tylko rejestruje ten motyw w update-alternatives i przebudowuje
+# initramfs, żeby Plymouth faktycznie z niego skorzystał.
+#
+# Pakiet "plymouth" musi być obecny w systemie (patrz
+# config/package-lists/live.list.chroot) - bez niego update-alternatives
+# oraz update-initramfs poniżej nic by nie dały.
+
+THEME="spinner"
+THEME_DIR="/usr/share/plymouth/themes/${THEME}"
+THEME_FILE="${THEME_DIR}/${THEME}.plymouth"
+
+if [ ! -f "$THEME_FILE" ]; then
+    echo "Błąd: nie znaleziono ${THEME_FILE} - motyw spinner nie został dograny do chroota." >&2
+    exit 1
+fi
+
+if ! command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    echo "Błąd: brak polecenia plymouth-set-default-theme - czy pakiet 'plymouth' jest zainstalowany?" >&2
+    exit 1
+fi
+
+# "-R" ustawia motyw i od razu przebudowuje initramfs (odpowiednik
+# ręcznego update-initramfs -u). Gdyby z jakiegoś powodu nie
+# przebudowało initramfs (np. inna wersja plymouth), robimy to jawnie
+# poniżej jako zabezpieczenie.
+plymouth-set-default-theme -R "$THEME"
+
+# Zabezpieczenie: upewnij się, że initramfs faktycznie zawiera nowy motyw.
+if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u -k all
+fi
+
+echo "Domyślny motyw Plymouth ustawiony na: ${THEME}"
