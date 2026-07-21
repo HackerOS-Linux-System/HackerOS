@@ -2,6 +2,7 @@ live-boot
 live-config
 live-config-systemd
 systemd-sysv
+plymouth
 plasma-desktop
 sddm
 alacritty
@@ -13,6 +14,7 @@ haruna
 flatpak
 snapd
 python3.13-venv
+lua5.5
 curl
 wget
 git
