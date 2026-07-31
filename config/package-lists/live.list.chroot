@@ -3,6 +3,7 @@ live-config
 live-config-systemd
 systemd-sysv
 plymouth
+plymouth-themes
 plasma-desktop
 sddm
 alacritty
