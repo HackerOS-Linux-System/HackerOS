@@ -11,9 +11,11 @@ set -e
 # - ten hook tylko rejestruje ten motyw w update-alternatives i przebudowuje
 # initramfs, żeby Plymouth faktycznie z niego skorzystał.
 #
-# Pakiet "plymouth" musi być obecny w systemie (patrz
-# config/package-lists/live.list.chroot) - bez niego update-alternatives
-# oraz update-initramfs poniżej nic by nie dały.
+# Pakiety "plymouth" ORAZ "plymouth-themes" muszą być obecne w systemie
+# (patrz config/package-lists/live.list.chroot). Sam "plymouth" daje tylko
+# silnik + kilka podstawowych motywów tekstowych - moduł graficzny
+# "two-step" (używany przez motyw spinner) jest w pakiecie
+# "plymouth-themes" (plik /usr/lib/<triplet>/plymouth/two-step.so).
 
 THEME="spinner"
 THEME_DIR="/usr/share/plymouth/themes/${THEME}"
@@ -27,6 +29,30 @@ fi
 if ! command -v plymouth-set-default-theme >/dev/null 2>&1; then
     echo "Błąd: brak polecenia plymouth-set-default-theme - czy pakiet 'plymouth' jest zainstalowany?" >&2
     exit 1
+fi
+
+# Sprawdź, czy moduł wymagany przez motyw (np. ModuleName=two-step) jest
+# fizycznie obecny jako .so - jeśli nie, plymouth-set-default-theme i tak
+# się wywali, więc lepiej dać od razu jasny, konkretny komunikat błędu.
+MODULE_NAME=$(sed -n 's/^ModuleName=//p' "$THEME_FILE" | head -n1 | tr -d '[:space:]')
+
+if [ -n "$MODULE_NAME" ]; then
+    MODULE_FOUND=""
+    for dir in /usr/lib/*/plymouth /usr/lib/plymouth; do
+        if [ -f "${dir}/${MODULE_NAME}.so" ]; then
+            MODULE_FOUND="${dir}/${MODULE_NAME}.so"
+            break
+        fi
+    done
+
+    if [ -z "$MODULE_FOUND" ]; then
+        echo "Błąd: nie znaleziono modułu Plymouth '${MODULE_NAME}.so' wymaganego przez motyw '${THEME}'." >&2
+        echo "Najprawdopodobniej brakuje pakietu 'plymouth-themes' (ten moduł jest w nim," >&2
+        echo "a nie w samym pakiecie 'plymouth'). Sprawdź config/package-lists/live.list.chroot." >&2
+        exit 1
+    fi
+
+    echo "Znaleziono wymagany moduł Plymouth: ${MODULE_FOUND}"
 fi
 
 # "-R" ustawia motyw i od razu przebudowuje initramfs (odpowiednik
