@@ -2,7 +2,7 @@
 
 /// motd — HackerOS Message of the Day
 
-using <gen 2>
+using <gen 1>
 
 ;; MC — wyjdz jesli subshell Midnight Commander
 > bash -c 'test -n "${MC_SID:-}"'
