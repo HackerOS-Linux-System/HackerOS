@@ -1,5 +1,5 @@
-#!/usr/bin/env hl
-using <gen 2>
+#!/usr/bin/hl
+using <gen 1>
 
 /// podhome — uruchamia kontener Podman jako root z mapowaniem HOME
 /// Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
