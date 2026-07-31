@@ -2,6 +2,8 @@ live-boot
 live-config
 live-config-systemd
 systemd-sysv
+plymouth
+plymouth-themes
 gnome
 gdm3
 alacritty
@@ -13,6 +15,7 @@ haruna
 flatpak
 snapd
 python3.13-venv
+lua5.5
 pip
 curl
 wget
@@ -33,7 +36,8 @@ grub2-common
 os-prober
 efibootmgr
 network-manager
-network-manager-gnome
+network-manager-applet
+nm-connection-editor
 polkit-kde-agent-1
 kwalletmanager
 mpv
