@@ -38,7 +38,8 @@ grub2-common
 os-prober
 efibootmgr
 network-manager
-network-manager-gnome
+network-manager-applet
+nm-connection-editor
 plasma-nm
 polkit-kde-agent-1
 kwalletmanager
