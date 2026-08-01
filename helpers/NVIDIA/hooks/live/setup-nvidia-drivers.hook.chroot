@@ -1,1 +1,86 @@
+#!/bin/bash
+set -e
 
+# =====================================================================
+# setup-nvidia-drivers.hook.chroot
+# =====================================================================
+#
+# Ten hook naprawia powód, dla którego sterownik NVIDIA nie działał na
+# realnym sprzęcie ("cannot load nvidia...") mimo że pakiety instalowały
+# się bez błędu: pakiet nvidia-kernel-dkms owszem się instalował, ale
+# sam MODUŁ jądra (nvidia-current.ko) nigdy nie powstawał. Powody:
+#
+#   1. W package-lists brakowało pakietu z nagłówkami jądra
+#      (linux-headers-*). Bez nich DKMS w ogóle nie próbuje budować
+#      modułu i tylko cicho ostrzega w logu builda:
+#        "WARNING: No kernel headers were found, skipping module build."
+#      (patrz config/package-lists -> helpers/NVIDIA/package-lists/live.list.chroot,
+#      dodano tam "linux-headers-amd64").
+#
+#   2. Nawet z nagłówkami na miejscu, automatyczny wyzwalacz dpkg dla
+#      DKMS (odpalany w trakcie instalacji pakietu wewnątrz chroota)
+#      próbuje budować moduł dla `uname -r`, czyli jądra HOSTA
+#      budującego obraz (np. jądro runnera GitHub Actions, typu
+#      6.17.0-1020-azure), a NIE dla jądra faktycznie zainstalowanego
+#      w chroocie (/lib/modules/<wersja>), które pojedzie w finalnym
+#      obrazie ISO. Dlatego poniżej sami, jawnie, wywołujemy
+#      "dkms autoinstall" ze wskazaniem KONKRETNEJ wersji jądra
+#      zainstalowanej w chroocie - nie polegamy na uname -r.
+#
+# Ten hook musi wykonać się PO zainstalowaniu pakietów (patrz
+# config/package-lists) - hooki z config/hooks/live/ (do których w
+# trakcie builda dokładane są też hooki z helpers/<edycja>/hooks/live/)
+# uruchamiają się właśnie w tym momencie.
+
+echo "=== Budowanie modułu(ów) NVIDIA DKMS dla jądra zainstalowanego w obrazie ==="
+
+if ! command -v dkms >/dev/null 2>&1; then
+    echo "Błąd: brak polecenia 'dkms' - czy pakiet 'dkms' jest zainstalowany (patrz nvidia-kernel-dkms)?" >&2
+    exit 1
+fi
+
+# Wersje jądra faktycznie zainstalowane w tym chroocie (czyli w
+# finalnym obrazie live) - NIGDY nie polegamy tu na `uname -r`, bo to
+# zwróciłoby jądro maszyny budującej obraz (hosta CI), a nie jądro
+# docelowe.
+KERNEL_VERSIONS="$(ls /lib/modules 2>/dev/null | sort -V)"
+
+if [ -z "$KERNEL_VERSIONS" ]; then
+    echo "Błąd: w /lib/modules nie znaleziono żadnego zainstalowanego jądra." >&2
+    exit 1
+fi
+
+BUILT_ANY=0
+
+for KVER in $KERNEL_VERSIONS; do
+    echo "--- Jądro: ${KVER} ---"
+
+    if [ ! -d "/usr/src/linux-headers-${KVER}" ]; then
+        echo "Ostrzeżenie: brak /usr/src/linux-headers-${KVER} - pomijam to jądro." >&2
+        echo "(dopisz pasujący pakiet linux-headers-* do package-lists, jeśli to jądro też ma mieć sterownik NVIDIA)" >&2
+        continue
+    fi
+
+    dkms autoinstall -k "$KVER"
+
+    if find "/lib/modules/${KVER}" -name 'nvidia*.ko*' 2>/dev/null | grep -q .; then
+        echo "OK: zbudowano moduł(y) NVIDIA dla jądra ${KVER}."
+        BUILT_ANY=1
+    else
+        echo "Ostrzeżenie: dkms autoinstall zakończone, ale nie znaleziono nvidia*.ko dla jądra ${KVER}." >&2
+    fi
+done
+
+if [ "$BUILT_ANY" -ne 1 ]; then
+    echo "Błąd: nie udało się zbudować modułu NVIDIA DKMS dla ŻADNEGO zainstalowanego jądra." >&2
+    echo "Sprawdź, czy w package-lists jest 'linux-headers-amd64' (lub pasująca wersja) obok 'nvidia-kernel-dkms'." >&2
+    exit 1
+fi
+
+# Upewnij się, że initramfs zawiera świeżo zbudowany moduł - podobnie jak
+# przy motywie Plymouth, initrd wygenerowany teraz trafi do finalnego ISO.
+if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u -k all
+fi
+
+echo "=== Zakończono budowanie modułów NVIDIA DKMS ==="
