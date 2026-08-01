@@ -192,12 +192,26 @@ jobs:
           mv -- "$SRC" "$DEST"
           echo "Zmieniono nazwę: $SRC -> $DEST"
           echo "iso_path=$DEST" >> "$GITHUB_OUTPUT"
+      - name: Wygenerowanie sum kontrolnych obrazu ISO (SHA256 / SHA512)
+        id: checksums
+        if: steps.find_iso.outputs.iso_found != ''
+        run: |
+          ISO="${{ steps.rename_iso.outputs.iso_path }}"
+          sha256sum "$ISO" > "${ISO}.sha256sum"
+          sha512sum "$ISO" > "${ISO}.sha512sum"
+          echo "--- ${ISO}.sha256sum ---"
+          cat "${ISO}.sha256sum"
+          echo "--- ${ISO}.sha512sum ---"
+          cat "${ISO}.sha512sum"
       - name: Wgranie ISO jako artefaktu builda
         if: steps.find_iso.outputs.iso_found != ''
         uses: actions/upload-artifact@v4
         with:
           name: HackerOS-V${{ steps.version.outputs.version }}-${{ matrix.edition }}
-          path: ${{ steps.rename_iso.outputs.iso_path }}
+          path: |
+            ${{ steps.rename_iso.outputs.iso_path }}
+            ${{ steps.rename_iso.outputs.iso_path }}.sha256sum
+            ${{ steps.rename_iso.outputs.iso_path }}.sha512sum
           if-no-files-found: warn
 
   package-all:
@@ -222,7 +236,7 @@ jobs:
         run: |
           cd all-isos
           ls -la
-          zip -X "../HackerOS-V${{ steps.version.outputs.version }}-all.zip" *.iso
+          zip -X "../HackerOS-V${{ steps.version.outputs.version }}-all.zip" *.iso *.sha256sum *.sha512sum
       - name: Wgranie zbiorczego archiwum ZIP jako artefaktu builda
         uses: actions/upload-artifact@v4
         with:
