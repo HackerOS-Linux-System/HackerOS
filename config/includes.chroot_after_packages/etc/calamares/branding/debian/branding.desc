@@ -11,8 +11,8 @@ strings:
     shortProductName:    HackerOS
     version:             4
     shortVersion:        4
-    versionedName:       HackerOS 4.8
-    shortVersionedName:  HackerOS 4.8
+    versionedName:       HackerOS 4.9
+    shortVersionedName:  HackerOS 4.9
     bootloaderEntryName: HackerOS
     productUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
     supportUrl:          https://github.com/HackerOS-Linux-System/HackerOS/discussions
