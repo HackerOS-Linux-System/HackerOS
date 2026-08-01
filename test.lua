@@ -1,7 +1,6 @@
 #!/usr/bin/env lua
 
 local REPO          = "HackerOS-Linux-System/HackerOS"
-local ARTIFACT_HINT = "hackeros%-v4%.9%-official" -- dopasowanie (lowercase, lua pattern)
 local API_BASE       = "https://api.github.com/repos/" .. REPO
 local WORKDIR         = (os.getenv("HOME") or "/tmp") .. "/.cache/hackeros-test"
 local TOKEN            = os.getenv("GITHUB_TOKEN")
@@ -58,6 +57,62 @@ end
 
 local function mkdirp(path)
     exec_capture("mkdir -p " .. string.format("%q", path))
+end
+
+---------------------------------------------------------------------
+-- Wykrywanie wersji / wzorzec dopasowania artefaktów
+---------------------------------------------------------------------
+--
+-- Dawniej wersja i edycja były zaszyte na sztywno w kodzie
+-- ("hackeros-v4.9-official"), więc skrypt przestawał działać przy
+-- każdym podbiciu wersji i nie dało się nim przetestować żadnej innej
+-- edycji niż "official". Teraz:
+--
+--   1. Skrypt PRÓBUJE wykryć bieżącą wersję z config.hk leżącego w tym
+--      samym repo (obok test.lua) - to ten sam plik, z którego wersję
+--      czyta workflow CI.
+--   2. Niezależnie od tego, czy się to uda, dopasowywana jest KAŻDA
+--      edycja (official/gaming/xfce/gnome/NVIDIA/blue/hwde/atomic/...),
+--      a wybór spośród dopasowanych artefaktów i tak należy do
+--      użytkownika (patrz choose_artifact niżej - jeśli jest ich
+--      kilka, pokazuje listę do wyboru numerem).
+--   3. Jeśli nie uda się odczytać wersji z config.hk (np. skrypt
+--      uruchomiono poza repo), skrypt nie poddaje się - po prostu
+--      pokazuje WSZYSTKIE dostępne artefakty HackerOS-V*-* z
+--      najnowszego builda, niezależnie od wersji.
+
+-- Katalog, w którym leży ten skrypt (żeby config.hk znaleźć niezależnie
+-- od tego, z jakiego katalogu roboczego skrypt zostanie uruchomiony).
+local SCRIPT_DIR = (arg and arg[0] and arg[0]:match("^(.*)/[^/]+$")) or "."
+local CONFIG_HK_PATH = SCRIPT_DIR .. "/config.hk"
+
+-- Znaki specjalne wzorców Lua trzeba poprzedzić "%", żeby np. kropka w
+-- numerze wersji ("4.9") nie została potraktowana jako "dowolny znak".
+local function lua_pattern_escape(s)
+    return (s:gsub("(%W)", "%%%1"))
+end
+
+-- Czyta "version => X.Y" z sekcji [metadata] pliku config.hk. Zwraca
+-- nil (zamiast przerywać działanie), jeśli plik nie istnieje albo nie
+-- udało się rozpoznać wersji - to celowo NIE jest błąd krytyczny.
+local function read_current_version()
+    local f = io.open(CONFIG_HK_PATH, "r")
+    if not f then return nil end
+    local content = f:read("*a") or ""
+    f:close()
+    return content:match("version%s*=>%s*([%d%.]+)")
+end
+
+local CURRENT_VERSION = read_current_version()
+
+-- Wzorzec (lowercase, Lua) do dopasowania nazw artefaktów. Dopasowuje
+-- KAŻDĄ edycję ("-<cokolwiek>" na końcu), a wersję tylko wtedy, gdy
+-- udało się ją wykryć - inaczej dopasuje dowolną wersję.
+local ARTIFACT_HINT
+if CURRENT_VERSION then
+    ARTIFACT_HINT = "hackeros%-v" .. lua_pattern_escape(CURRENT_VERSION) .. "%-"
+else
+    ARTIFACT_HINT = "hackeros%-v[%d%.]+%-"
 end
 
 ---------------------------------------------------------------------
@@ -182,7 +237,10 @@ end
 
 local function choose_artifact(matches)
     if #matches == 0 then
-        die('Nie znaleziono żadnego artefaktu pasującego do "HackerOS-V4.9-official" w najnowszym uruchomieniu.')
+        local hint = CURRENT_VERSION
+            and ("HackerOS-V" .. CURRENT_VERSION .. "-<edycja>")
+            or "HackerOS-V<wersja>-<edycja>"
+        die('Nie znaleziono żadnego artefaktu pasującego do "' .. hint .. '" w najnowszym uruchomieniu.')
     elseif #matches == 1 then
         info("Znaleziono jeden pasujący artefakt: " .. matches[1].name)
         return matches[1]
@@ -523,6 +581,14 @@ end
 local function main()
     check_dependencies()
     mkdirp(WORKDIR)
+
+    if CURRENT_VERSION then
+        info("Wykryto bieżącą wersję z " .. CONFIG_HK_PATH .. ": " .. CURRENT_VERSION ..
+             " - szukam artefaktów tej wersji (dowolna edycja).")
+    else
+        warn("Nie udało się odczytać wersji z " .. CONFIG_HK_PATH ..
+             " - pokażę wszystkie dostępne artefakty HackerOS (dowolna wersja/edycja).")
+    end
 
     local run_id       = get_latest_successful_run_id()
     local artifacts     = get_artifacts(run_id)
