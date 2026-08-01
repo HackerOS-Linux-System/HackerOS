@@ -86,6 +86,7 @@ nala
 kcalc
 libreoffice
 thunderbird
+linux-headers-amd64
 nvidia-driver
 nvidia-kernel-dkms
 nvidia-smi
