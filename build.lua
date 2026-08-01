@@ -77,36 +77,96 @@ local function heading(text)
 end
 
 -- =====================================================================
--- WERSJE APLIKACJI
+-- WERSJE APLIKACJI (packages/manifest.hk)
 -- =====================================================================
 
+-- Wersje narzędzi/binarek NIE są już zaszyte na sztywno w build.lua -
+-- są jedynym źródłem prawdy w packages/manifest.hk, w sekcji [tools],
+-- w tym samym formacie co packages.hk/config.hk:
+--
+--   [tools]
+--   -> "Nazwa z odstępami" => vX.Y
+--   -> nazwa_bez_odstepow  => vX.Y
+--
+-- Dzięki temu podbicie wersji dowolnego narzędzia to edycja JEDNEGO
+-- pliku (packages/manifest.hk), bez dotykania build.lua.
+
+local MANIFEST_PATH = "packages/manifest.hk"
+
+-- Parsuje sekcję [tools] z packages/manifest.hk do zwykłej tabeli
+-- { ["nazwa narzędzia"] = "wersja", ... }. Obsługuje zarówno klucze
+-- w cudzysłowie ("Hacker Term"), jak i gołe (hacker, hnm, ...).
+local function parse_hk_tools_manifest(path)
+    local f = io.open(path, "r")
+    if not f then
+        io.stderr:write("Błąd: nie znaleziono pliku manifestu wersji: " .. path .. "\n")
+        os.exit(1)
+    end
+
+    local tools = {}
+    local in_tools_section = false
+
+    for line in f:lines() do
+        local section = line:match("^%s*%[([%w_%-]+)%]%s*$")
+        if section then
+            in_tools_section = (section == "tools")
+        elseif in_tools_section then
+            local qname, qver = line:match('^%s*%-%>%s*"([^"]+)"%s*=>%s*(%S+)%s*$')
+            local bname, bver = line:match('^%s*%-%>%s*([%w_%-]+)%s*=>%s*(%S+)%s*$')
+            local name, ver = qname or bname, qver or bver
+            if name and ver then
+                tools[name] = ver
+            end
+        end
+    end
+    f:close()
+
+    return tools
+end
+
+local MANIFEST_TOOLS = parse_hk_tools_manifest(MANIFEST_PATH)
+
+-- Zwraca wersję narzędzia z manifestu albo przerywa build z jasnym
+-- komunikatem, jeśli brakuje wpisu (lepiej wywalić się od razu na
+-- starcie, niż pobrać/skopiować coś z pustą/nil wersją w środku builda).
+local function manifest_version(name)
+    local ver = MANIFEST_TOOLS[name]
+    if not ver then
+        io.stderr:write(
+            "Błąd: brak wpisu \"" .. name .. "\" w sekcji [tools] pliku " .. MANIFEST_PATH .. "\n"
+        )
+        os.exit(1)
+    end
+    return ver
+end
+
 -- Kategoria: HackerOS-Apps
-local VER_STORE    = "v0.6"
-local VER_LAUNCHER = "v1.0"
-local VER_PROTON   = "v0.0.1"
-local VER_TERM     = "v0.8"
-local VER_WELCOME  = "v0.6"
+local VER_STORE    = manifest_version("HackerOS Store")
+local VER_LAUNCHER = manifest_version("Hacker Launcher")
+local VER_PROTON   = manifest_version("Proton Manager")
+local VER_TERM     = manifest_version("Hacker Term")
+local VER_WELCOME  = manifest_version("HackerOS Welcome")
 
 -- Kategoria: /usr/bin
-local VER_CLI    = "v2.4.2"
-local VER_NIX    = "v0.1"
-local VER_LANG   = "gen-1"
-local VER_HPM    = "v0.9"
-local VER_CHKER  = "v0.1"
-local VER_GETIT  = "v0.4"
-local VER_STEAM  = "v0.4"
-local VER_HSH    = "v0.4"
-local VER_NGT    = "v0.4"
-local VER_HEDIT  = "v0.5"
+local VER_CLI    = manifest_version("hacker")
+local VER_NIX    = manifest_version("hnm")
+local VER_LANG   = manifest_version("Hacker Lang")
+local VER_HPM    = manifest_version("hpm")
+local VER_CHKER  = manifest_version("chker")
+local VER_GETIT  = manifest_version("getit")
+local VER_STEAM  = manifest_version("HackerOS Steam")
+local VER_HSH    = manifest_version("hsh")
+local VER_NGT    = manifest_version("ngt")
+local VER_HEDIT  = manifest_version("hedit")
 
 -- Kategoria: HackerOS-Games
-local VER_GAMES  = "v0.8"
+local VER_GAMES  = manifest_version("HackerOS Games")
 
 -- Kategoria: gaming-cli (edycja --gaming)
-local VER_GAMING = "v0.2"
+local VER_GAMING = manifest_version("gaming-cli")
 
 -- Kategoria: hammer (edycja --atomic)
-local VER_HAMMER = "v0.5.0"
+local VER_HAMMER = manifest_version("hammer")
 
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
