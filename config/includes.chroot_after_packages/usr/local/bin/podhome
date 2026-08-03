@@ -1,47 +1,46 @@
-#!/usr/bin/env bash
+#!/usr/bin/env hl
+using <gen 1>
+/// podhome — uruchamia kontener Podman z mapowaniem HOME (persistent)
+;; Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
 
-# podhome — uruchamia kontener Podman z mapowaniem HOME (persistent)
-# Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
+;; Sprawdzenie argumentów
+> test @argc -lt 1
+? ok
+    ::red Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
+    ~> Przykład: podhome fedora
+    ~>          podhome ubuntu /bin/zsh
+    > exit 1
+done
 
-# Kolory
-COLOR_RED='\033[0;31m'
-COLOR_RESET='\033[0m'
+% IMAGE = @arg0
 
-# Sprawdzenie argumentów
-if [ $# -lt 1 ]; then
-    echo -e "${COLOR_RED}Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]${COLOR_RESET}"
-    echo "Przykład: podhome fedora"
-    echo "          podhome ubuntu /bin/zsh"
-    exit 1
-fi
+;; Domyślna komenda
+% COMMAND = /bin/bash
 
-IMAGE="$1"
-shift
+;; Jeśli podano dodatkowe argumenty — bierzemy pierwszy jako komendę
+> test @argc -gt 1
+? ok
+    % COMMAND = @arg1
+done
 
-# Domyślna komenda
-COMMAND="${@:-/bin/bash}"
+;; Generowanie bezpiecznej nazwy kontenera (bez echo)
+> printf '%s' "@IMAGE" | tr '/:' '-' > /tmp/podhome-safe-name
+> cat /tmp/podhome-safe-name
+% SAFE_IMAGE = @_          ;; wynik ostatniej komendy trafia do @_
+% CONTAINER_NAME = podhome-@SAFE_IMAGE
 
-# Nazwa kontenera — dzięki temu zmiany się nie kasują
-CONTAINER_NAME="podhome-$(echo "$IMAGE" | tr '/:' '-')"
+;; Sprawdzamy czy kontener już istnieje
+> podman container exists @CONTAINER_NAME 2>/dev/null
+? err
+    ~> Tworzę nowy kontener: @CONTAINER_NAME
+    > podman create \
+        --name @CONTAINER_NAME \
+        -v @HOME:@HOME:Z \
+        @IMAGE sleep infinity
+done
 
-# Sprawdzamy czy kontener już istnieje
-if ! podman container exists "$CONTAINER_NAME" 2>/dev/null; then
-    echo "Tworzę nowy kontener: $CONTAINER_NAME"
+~> Wchodzę do kontenera: @CONTAINER_NAME
+> podman start @CONTAINER_NAME >/dev/null
 
-    # USUNIĘTO: --user root i --userns=keep-id, które gryzły się z montowaniem $HOME
-    # DODANO: --interactive --tty, aby kontener poprawnie trzymał proces sleep
-    podman create \
-        --name "$CONTAINER_NAME" \
-        -v "$HOME:$HOME:Z" \
-        "$IMAGE" sleep infinity
-fi
-
-# Uruchamiamy kontener (bez uciszania błędów, żeby było widać co się dzieje w razie wpadki)
-echo -e "${COLOR_RESET}Wchodzę do kontenera: ${CONTAINER_NAME}"
-podman start "$CONTAINER_NAME" >/dev/null
-
-# Exec — wchodzimy do kontenera.
-# Jeśli chcesz być rootem, podman exec domyślnie wchodzi jako root, chyba że obraz wymusza inaczej.
-podman exec -it \
-    "$CONTAINER_NAME" \
-    "$COMMAND"
+;; Exec — wchodzimy do kontenera
+> podman exec -it @CONTAINER_NAME @COMMAND
