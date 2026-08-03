@@ -1,1 +1,14 @@
+[project]
+-> name => hackeros-cybersecurity
+-> tag => stable
+-> selinux => true
 
+[account]
+-> type => organisation
+-> name => HackerOS-Linux-System
+
+[auth]
+-> token => 
+
+[release]
+-> name => trixie
