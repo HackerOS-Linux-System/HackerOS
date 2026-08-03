@@ -1,0 +1,15 @@
+wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -O /usr/share/wordlists/rockyou.txt
+
+wget "https://portswigger.net/burp/releases/download?product=community&version=2024.1.1&type=Linux" -O burp_install.sh
+chmod +x burp_install.sh
+./burp_install.sh
+
+wget https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -O /opt/linpeas.sh
+
+curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall && chmod 755 msfinstall && ./msfinstall
+
+# Nikto
+git clone https://github.com/sullo/nikto /opt/nikto
+
+# Commix
+git clone https://github.com/commixproject/commix.git /opt/commix
