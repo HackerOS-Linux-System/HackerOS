@@ -1,4 +1,4 @@
-#!/usr/bin/env hl
+#!/usr/bin/hl
 using <gen 1>
 /// podhome — uruchamia kontener Podman z mapowaniem HOME (persistent)
 ;; Użycie: podhome [nazwa_obrazu] [opcjonalne_polecenie]
