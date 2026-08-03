@@ -431,11 +431,13 @@ end
 local function step_extract_archives()
     heading("Rozpakowywanie archiwów")
 
-    -- Uwaga: plik w repozytorium nazywa się "oh-my-zsh.tar.gz" (bez kropki
-    -- na początku nazwy), mimo że trafia do katalogu ukrytego .config.
-    local zsh_archive = ETC_SKEL .. "/.config/oh-my-zsh.tar.gz"
+    -- Archiwum leży bezpośrednio w etc/skel/oh-my-zsh.tar.gz (NIE w
+    -- podkatalogu .config/) i już zawiera w sobie katalog ".oh-my-zsh/"
+    -- jako wpis najwyższego poziomu - wystarczy więc rozpakować je od
+    -- razu do ETC_SKEL, żeby powstało config/.../etc/skel/.oh-my-zsh/.
+    local zsh_archive = ETC_SKEL .. "/oh-my-zsh.tar.gz"
     if exists(zsh_archive) then
-        sh("tar -xzf " .. quote(zsh_archive) .. " -C " .. quote(ETC_SKEL .. "/.config"))
+        sh("tar -xzf " .. quote(zsh_archive) .. " -C " .. quote(ETC_SKEL))
         sh("rm " .. quote(zsh_archive))
     else
         io.write("Ostrzeżenie: Nie znaleziono archiwum " .. zsh_archive .. "\n")
