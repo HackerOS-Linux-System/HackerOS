@@ -24,9 +24,10 @@ sh("cp -r helpers/hwde/. config/")
 -- Tworzymy docelowy katalog na pliki binarne
 sh("mkdir -p " .. quote(bin_dir))
 
--- Pobieramy pliki HWDE
+-- Pobieramy pliki HWDE (comphwde: v0.2, starthwde: nadal v0.1 - najnowszy
+-- wydany build tego binarium)
 sh("wget -O " .. quote(bin_dir .. "/comphwde") ..
-   " https://github.com/HackerOS-Linux-System/HWDE/releases/download/v0.1/comphwde")
+   " https://github.com/HackerOS-Linux-System/HWDE/releases/download/v0.2/comphwde")
 
 sh("wget -O " .. quote(bin_dir .. "/starthwde") ..
    " https://github.com/HackerOS-Linux-System/HWDE/releases/download/v0.1/starthwde")
