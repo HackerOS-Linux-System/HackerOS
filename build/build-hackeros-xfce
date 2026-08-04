@@ -1,1 +1,47 @@
+#!/usr/bin/env lua5.5
 
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+-- Uwaga: kopiowanie helpers/xfce do config/ robi już build.lua w kroku
+-- step_xfce_pre_build (EDITION_PRE_BUILD["xfce"]), PRZED uruchomieniem tego
+-- skryptu - nie trzeba tego powtarzać tutaj.
+--
+-- Ten plik był wcześniej PUSTY (0 bajtów) mimo że build.lua wskazywał na
+-- niego jako build_script dla --xfce. Efekt: "lua5.5
+-- build/build-hackeros-xfce" kończył się natychmiast bez błędu (pusty
+-- skrypt = sukces), WIĘC "lb build" nigdy się nie uruchamiało, ISO nigdy
+-- nie powstawało, a krok CI "Wyszukanie zbudowanych obrazów ISO" nie
+-- znajdował nic do spakowania/wgrania (stąd job kończył się na zielono,
+-- ale bez artefaktu/zipa w outputs).
+
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true " ..
+    "--security false " ..
+    '--debootstrap-options "--include=gnupg"'
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
