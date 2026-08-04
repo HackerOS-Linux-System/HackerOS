@@ -4,18 +4,22 @@ local function quote(s)
     return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
-local function sh(cmd)
+local function sh(cmd, allow_fail)
     io.write("+ " .. cmd .. "\n")
     local ok = os.execute(cmd)
-    if ok ~= true and ok ~= 0 then
-        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
-        os.exit(1)
+    if ok == true or ok == 0 then
+        return true
     end
-    return true
+    if allow_fail then
+        io.stderr:write("Ostrzeżenie: polecenie nie powiodło się (kontynuuję): " .. cmd .. "\n")
+        return false
+    end
+    io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+    os.exit(1)
 end
 
-local function download(url, dest)
-    sh("wget -q --show-progress -O " .. quote(dest) .. " " .. quote(url))
+local function download(url, dest, allow_fail)
+    sh("wget -q --show-progress -O " .. quote(dest) .. " " .. quote(url), allow_fail)
 end
 
 -- Katalogi docelowe
@@ -60,9 +64,11 @@ sh("rm -f " .. quote(ARCHIVE_TMP))
 sh("find " .. quote(BLUE_DIR) .. " -maxdepth 2 -type f -name 'blue*' -exec chmod a+x {} +", true)
 
 --------------------------------------------------------------------------
--- 4. Pobieramy domyślną tapetę
+-- 4. Pobieramy domyślną tapetę (best-effort - nie przerywamy builda, jeśli
+--    ten konkretny plik akurat zniknął/zmienił ścieżkę w repo Blue-Environment;
+--    tapeta jest kosmetyczna, w przeciwieństwie do samego środowiska).
 --------------------------------------------------------------------------
-download(WALLPAPER_URL, WALLPAPER_DIR .. "/default.png")
+download(WALLPAPER_URL, WALLPAPER_DIR .. "/default.png", true)
 
 --------------------------------------------------------------------------
 -- 5. Pobieramy binarki bedm / bedm-greeter do /usr/bin
