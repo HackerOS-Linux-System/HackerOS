@@ -251,7 +251,7 @@ local EDITIONS = {
         pre_build    = "lts",
     },
     gnome = {
-        build_script = "build/build-hackeros",
+        build_script = "build/build-hackeros-gnome",
         placeholder  = false,
         pre_build    = "gnome",
     },
@@ -266,6 +266,7 @@ local EDITIONS = {
         pre_build    = "atomic",
     },
     nvidia = {
+        build_script = "build/build-hackeros-nvidia",
         placeholder  = false,
         pre_build    = "nvidia",
     },
