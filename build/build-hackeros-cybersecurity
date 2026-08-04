@@ -1,17 +1,12 @@
 #!/usr/bin/env lua5.5
 
-local WORKDIR = "/home/michal-hackeros/Pobrane/hackeros-official"
-
 local function quote(s)
     return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
--- Wszystkie polecenia wykonujemy w kontekście WORKDIR (odpowiednik `cd` z bash,
--- które w Lua nie przetrwałoby między kolejnymi os.execute).
 local function sh(cmd)
-    local full = "cd " .. quote(WORKDIR) .. " && " .. cmd
-    io.write("+ " .. full .. "\n")
-    local ok = os.execute(full)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
     if ok ~= true and ok ~= 0 then
         io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
         os.exit(1)
@@ -19,7 +14,23 @@ local function sh(cmd)
     return true
 end
 
-os.execute("clear")
+-- POPRAWKA: poprzednia wersja tego skryptu miała na sztywno wpisany
+-- prywatny katalog dewelopera ("/home/michal-hackeros/Pobrane/hackeros-official")
+-- i wykonywała każde polecenie przez "cd <ten katalog> && ...". Ten katalog
+-- nie istnieje na runnerze CI (tam repo leży w $GITHUB_WORKSPACE) ani u
+-- innych osób lokalnie, więc build zawsze kończył się błędem poza maszyną
+-- autora. Teraz - tak jak reszta skryptów build/build-hackeros* - działamy
+-- względem bieżącego katalogu roboczego (czyli katalogu repo), bez "cd".
+
+-- Edycja cybersecurity NIE jest już budowana z osobnego brancha "cybersecurity" -
+-- buduje się na dowolnym branchu, na którym leży ten skrypt. Katalog
+-- helpers/cybersecurity/ (hooki, package-lists, archives, includes...) jest
+-- częścią repo i wystarczy skopiować jego zawartość do config/.
+sh("mkdir -p config")
+sh("cp -r helpers/cybersecurity/. config/")
+
+-- Debootstrap zna "trixie" natywnie (Debian Stable) - nie trzeba go
+-- podpinać pod skrypt "sid" tak jak przy forky/testing.
 
 -- Czyścimy poprzednie buildy
 sh("sudo lb clean --purge")
@@ -35,6 +46,3 @@ sh(
 
 -- Budowa obrazu
 sh("sudo lb build")
-
--- Czyszczenie po buildzie
-sh("sudo lb clean --purge")
