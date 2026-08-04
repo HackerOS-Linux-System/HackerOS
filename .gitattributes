@@ -80,6 +80,10 @@ build-hackeros-gnome linguist-language=LUA
 
 build-hackeros-xfce linguist-detectable=true
 build-hackeros-xfce linguist-documentation=false
+build-hackeros-lts linguist-language=LUA
+
+build-hackeros-xfce linguist-detectable=true
+build-hackeros-xfce linguist-documentation=false
 build-hackeros-xfce linguist-language=LUA
 
 build-hackeros-cybersecurity-default linguist-detectable=true
