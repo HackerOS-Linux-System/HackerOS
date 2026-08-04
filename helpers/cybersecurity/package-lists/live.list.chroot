@@ -36,7 +36,7 @@ grub2-common
 os-prober
 efibootmgr
 network-manager
-network-manager-gnome
+network-manager-applet
 plasma-nm
 polkit-kde-agent-1
 kwalletmanager
@@ -47,14 +47,12 @@ isc-dhcp-client
 firmware-misc-nonfree
 pavucontrol
 pipewire
-pipewire
 alsa-utils
 mesa-utils
 mesa-vulkan-drivers
 amd64-microcode
 intel-microcode
 firmware-linux
-firmware-misc-nonfree
 firmware-iwlwifi
 firmware-intel-misc
 firmware-realtek
@@ -67,7 +65,6 @@ firmware-amd-graphics
 firmware-intel-graphics
 firmware-ti-connectivity
 firmware-zd1211
-firmware-ath9k-htc
 zenity
 gamemode
 lsb-release
@@ -111,5 +108,4 @@ macchanger
 tor
 proxychains4
 ufw
-cage
 aptitude
