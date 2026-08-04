@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+
+REPO="HyperPlay-Gaming/hyperplay-desktop-client"
+
+# 1. Sprawdzenie wymaganych narzędzi
+for cmd in curl jq; do
+  if ! command -v $cmd &> /dev/null; then
+    echo "Błąd: Program '$cmd' nie jest zainstalowany."
+    echo "Zainstaluj go poleceniem: sudo apt install $cmd"
+    exit 1
+  fi
+done
+
+# 2. Pobranie adresu URL pliku .deb z najnowszego wydania
+echo "Wyszukiwanie najnowszego wydania na GitHubie..."
+DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" \
+  | jq -r '.assets[] | select(.name | endswith(".deb")) | .browser_download_url' | head -n 1)
+
+if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" == "null" ]; then
+  echo "Błąd: Nie udało się znaleźć pliku .deb w najnowszym wydaniu."
+  exit 1
+fi
+
+FILE_NAME=$(basename "$DOWNLOAD_URL")
+TEMP_DIR=$(mktemp -d)
+
+# 3. Pobranie pliku
+echo "Pobieranie: $FILE_NAME..."
+curl -L --progress-bar -o "$TEMP_DIR/$FILE_NAME" "$DOWNLOAD_URL"
+
+# 4. Instalacja z użyciem apt (rozwiązuje zależności)
+echo "Instalowanie pakietu..."
+sudo apt update
+sudo apt install -y "$TEMP_DIR/$FILE_NAME"
+
+# 5. Sprzątanie
+rm -rf "$TEMP_DIR"
+
+echo "Instalacja zakończona pomyślnie!"
