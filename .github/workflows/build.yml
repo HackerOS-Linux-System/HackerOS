@@ -10,6 +10,7 @@ on:
         options:
           - official
           - all
+          - monthly
           - gaming
           - cybersecurity
           - blue
@@ -37,12 +38,16 @@ jobs:
       - name: Wyznaczenie listy edycji do zbudowania
         id: set-matrix
         run: |
-          # Edycje "official" - ich skrypty build-hackeros* żyją na branchu "official".
+          # Edycje "official"
           OFFICIAL_EDITIONS='["official","gaming","blue","hwde","hydra","lts","gnome","xfce","atomic","nvidia"]'
-          # Edycje "cybersecurity" - ich skrypty build-hackeros-cybersecurity*
-          # żyją na branchu "cybersecurity", więc budujemy je z tamtego brancha.
+          # Edycje "cybersecurity" - od teraz budowane na TYM SAMYM branchu co
+          # reszta (helpers/cybersecurity i helpers/cybersecurity-default żyją
+          # w repo obok pozostałych helpers/*, nie na osobnym branchu).
           CYBERSECURITY_EDITIONS='["cybersecurity","cybersecurity-default"]'
           ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic","nvidia"]'
+          # Opcja "monthly" (uruchamiana ręcznie raz w miesiącu) - buduje tylko
+          # official, cybersecurity i nvidia.
+          MONTHLY_EDITIONS='["official","cybersecurity","nvidia"]'
 
           EDITION_INPUT="${{ github.event.inputs.edition }}"
           echo "edition_input=$EDITION_INPUT" >> "$GITHUB_OUTPUT"
@@ -55,10 +60,11 @@ jobs:
 
             if [ "$EDITION" = "all" ]; then
               # Opcja "all" - buduje każdą edycję osobno, każda na czystym
-              # (świeżym) środowisku runnera, jedna po drugiej. Edycje
-              # cybersecurity* są mimo to checkoutowane z brancha
-              # "cybersecurity" (patrz krok Checkout w jobie build).
+              # (świeżym) środowisku runnera, jedna po drugiej.
               echo "editions=$ALL_EDITIONS" >> "$GITHUB_OUTPUT"
+            elif [ "$EDITION" = "monthly" ]; then
+              # Opcja "monthly" - miesięczny build: official + cybersecurity + nvidia.
+              echo "editions=$MONTHLY_EDITIONS" >> "$GITHUB_OUTPUT"
             else
               echo "editions=[\"$EDITION\"]" >> "$GITHUB_OUTPUT"
             fi
@@ -67,7 +73,8 @@ jobs:
             echo "editions=$CYBERSECURITY_EDITIONS" >> "$GITHUB_OUTPUT"
           else
             # Push na branch "official" - budujemy wszystkie edycje "official"
-            # (cybersecurity* budują się wyłącznie z brancha "cybersecurity").
+            # (cybersecurity* trzeba zbudować ręcznie przez workflow_dispatch
+            # albo push na branch "cybersecurity").
             echo "editions=$OFFICIAL_EDITIONS" >> "$GITHUB_OUTPUT"
           fi
   build:
@@ -85,12 +92,12 @@ jobs:
       - name: Checkout repozytorium
         uses: actions/checkout@v4
         with:
-          # Edycje cybersecurity / cybersecurity-default mają swoje skrypty
-          # build-hackeros-cybersecurity* wyłącznie na branchu "cybersecurity",
-          # więc dla nich checkoutujemy ten branch niezależnie od tego, co
-          # wywołało workflow. Dla pozostałych edycji używamy brancha/commita,
-          # który wyzwolił bieżący workflow run.
-          ref: ${{ (matrix.edition == 'cybersecurity' || matrix.edition == 'cybersecurity-default') && 'cybersecurity' || github.ref }}
+          # POPRAWKA: cybersecurity / cybersecurity-default nie są już
+          # przypięte do osobnego brancha "cybersecurity" - build-hackeros-cybersecurity*
+          # i helpers/cybersecurity* żyją w tym samym repo/branchu co reszta,
+          # więc dla wszystkich edycji checkoutujemy zwyczajnie ten
+          # branch/commit, który wyzwolił bieżący workflow run.
+          ref: ${{ github.ref }}
       - name: Odczyt wersji z config.hk
         id: version
         run: |
@@ -171,7 +178,27 @@ jobs:
           sudo apt-get remove -y live-build || true
           sudo dpkg -i live-build_*.deb
           lb --version
+      - name: Instalacja hackeros-builder (tylko edycja cybersecurity-default)
+        if: matrix.edition == 'cybersecurity-default'
+        run: |
+          # hackeros-builder to osobne narzędzie (nie live-build) używane
+          # wyłącznie przez build/build-hackeros-cybersecurity-default do
+          # zbudowania jednocześnie kontenera OCI oraz ISO na podstawie
+          # config/config.hk. Zakładamy, że binarka releasu nazywa się
+          # "hackeros-builder" i jest publikowana jako "latest" release w
+          # repo HackerOS-Linux-System/hackeros-builder - jeśli nazwa
+          # assetu/repo jest inna, ten krok trzeba dostosować.
+          curl -fL -o /usr/local/bin/hackeros-builder \
+            "https://github.com/HackerOS-Linux-System/hackeros-builder/releases/latest/download/hackeros-builder"
+          chmod +x /usr/local/bin/hackeros-builder
+          hackeros-builder --version || true
       - name: Uruchomienie build.lua (edycja - ${{ matrix.edition }})
+        env:
+          # Sekret GitHub Actions o nazwie "cybersecurity-default" (token
+          # classic z uprawnieniami do org HackerOS-Linux-System) - używany
+          # wyłącznie przez build/build-hackeros-cybersecurity-default do
+          # wypełnienia [auth] -> token w config/config.hk.
+          CYBERSECURITY_DEFAULT_TOKEN: ${{ secrets.CYBERSECURITY_DEFAULT_TOKEN }}
         run: |
           chmod +x build.lua
           if [ "${{ matrix.edition }}" = "official" ]; then
