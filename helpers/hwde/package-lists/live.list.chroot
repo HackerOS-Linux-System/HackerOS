@@ -8,6 +8,9 @@ plymouth-themes
 dbus-user-session
 seatd
 sddm
+network-manager
+bluez
+blueman
 calamares
 calamares-settings-debian
 zsh
