@@ -4,6 +4,7 @@ live-config-systemd
 systemd-sysv
 plymouth
 plymouth-themes
+kbd
 linux-xanmod-lts-x64v3
 plasma-desktop
 sddm
