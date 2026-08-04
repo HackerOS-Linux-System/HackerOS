@@ -1,1 +1,45 @@
+#!/usr/bin/env lua5.5
 
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+-- Uwaga: kopiowanie helpers/gnome do config/ robi już build.lua w kroku
+-- step_gnome_pre_build (EDITION_PRE_BUILD["gnome"]), PRZED uruchomieniem
+-- tego skryptu - nie trzeba tego powtarzać tutaj.
+--
+-- Ten plik był wcześniej PUSTY (0 bajtów), a EDITIONS.gnome w build.lua nie
+-- wskazywał na niego jako build_script - --gnome budował się (przez
+-- domyślne build/build-hackeros), ale bez własnego skryptu edycja nie miała
+-- możliwości mieć osobnej logiki budowy. Teraz --gnome realnie używa tego
+-- pliku.
+
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true " ..
+    "--security false " ..
+    '--debootstrap-options "--include=gnupg"'
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
