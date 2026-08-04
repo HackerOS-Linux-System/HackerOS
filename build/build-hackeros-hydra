@@ -25,11 +25,23 @@ sh("rm -rf " .. quote(clone_dir))
 -- Klonujemy repozytorium do /tmp
 sh("git clone --depth 1 " .. quote(repo_url) .. " " .. quote(clone_dir))
 
--- Upewniamy się, że katalog config/ istnieje w bieżącym miejscu wykonania skryptu
-sh("mkdir -p config")
+-- Upewniamy się, że katalog config/includes.chroot_after_packages/ istnieje
+-- w bieżącym miejscu wykonania skryptu.
+--
+-- UWAGA (poprawka błędu): katalog files/ w repo hydra-look-and-feel zawiera
+-- bezpośrednio "etc/" i "usr/" (czyli już samą treść, którą live-build ma
+-- wgrać do systemu plików obrazu). Kopiowanie go do "config/" (czyli
+-- config/etc, config/usr) NIC nie robi z punktu widzenia live-build - ten
+-- katalog nie jest przez nie w żaden sposób interpretowany. live-build
+-- rozpoznaje wyłącznie config/includes.chroot_after_packages/ (kopiowane
+-- do obrazu PO instalacji pakietów) jako miejsce na tego typu pliki
+-- systemowe - stąd finalne ISO nie miało tych plików mimo poprawnego
+-- sklonowania repo i "udanego" kopiowania.
+local target_dir = "config/includes.chroot_after_packages"
+sh("mkdir -p " .. quote(target_dir))
 
--- Kopiujemy całą zawartość katalogu files/ z repo do config/
-sh("cp -r " .. quote(clone_dir .. "/files/.") .. " " .. quote("config/"))
+-- Kopiujemy całą zawartość katalogu files/ z repo do config/includes.chroot_after_packages/
+sh("cp -r " .. quote(clone_dir .. "/files/.") .. " " .. quote(target_dir .. "/"))
 
 -- Sprzątamy sklonowane repo z /tmp (opcjonalnie, ale porządkuje środowisko)
 sh("rm -rf " .. quote(clone_dir))
