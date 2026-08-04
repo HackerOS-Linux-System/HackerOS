@@ -501,7 +501,12 @@ end
 -- KROK 7: POBIERANIE NAJNOWSZEJ WERSJI VIVALDI
 -- =====================================================================
 
-local function step_download_vivaldi()
+local function step_download_vivaldi(edition)
+    if edition == "cybersecurity" or edition == "cybersecurity-default" then
+        heading("Tryb --" .. edition .. ": pomijam pobieranie przeglądarki Vivaldi")
+        return
+    end
+
     heading("Sprawdzanie najnowszej wersji Vivaldi w internecie")
 
     local url_base = "https://vivaldi.com/download/vivaldi-stable_amd64.deb"
@@ -798,33 +803,24 @@ local function step_atomic_hammer_repo()
     rmrf(HAMMER_TMP)
 end
 
--- --atomic: usunięcie HackerOS-Store.desktop, instalacja Hammer/Hammer-Store,
--- plik .desktop Hammer Store, repo-HackerOS w /etc/hammer, helpers/atomic.
+-- --atomic: instalacja samego Hammer (bez Hammer Store), repo-HackerOS w
+-- /etc/hammer, helpers/atomic. HackerOS-Store.desktop ZOSTAJE (klasyczny
+-- branding Store) - edycja atomic używa silnika Hammer "pod spodem", ale
+-- nie pokazuje osobnej aplikacji/ikony "Hammer Store".
 local function step_atomic_pre_build()
     heading("Tryb --atomic: dodatkowe operacje")
 
-    -- Usunięcie HackerOS-Store.desktop (zastępowanego przez Hammer Store)
-    local store_desktop = APPLICATIONS_DIR .. "/HackerOS-Store.desktop"
-    if exists(store_desktop) then
-        sh("rm -f " .. quote(store_desktop))
-    else
-        io.write("Ostrzeżenie: Nie znaleziono pliku " .. store_desktop .. "\n")
-    end
-
-    -- Binarki hammer / hammer-store
+    -- Binarka hammer (BEZ hammer-store - edycja atomic nie ma osobnej
+    -- aplikacji Hammer Store, tylko klasyczny HackerOS-Store).
     mkdirp(TARGET_BIN)
-    for _, name in ipairs({ "hammer", "hammer-store" }) do
+    do
+        local name = "hammer"
         local url  = "https://github.com/HackerOS-Linux-System/hammer/releases/download/" ..
                      VER_HAMMER .. "/" .. name
         local dest = TARGET_BIN .. "/" .. name
         download(url, dest)
         chmodx(dest)
     end
-
-    -- Plik .desktop dla Hammer Store (adres "blob" zamieniony na raw.githubusercontent.com)
-    mkdirp(APPLICATIONS_DIR)
-    local desktop_url = "https://raw.githubusercontent.com/HackerOS-Linux-System/hammer/main/store/data/org.hackerOS.HammerStore.desktop"
-    download(desktop_url, APPLICATIONS_DIR .. "/org.hackerOS.HammerStore.desktop")
 
     -- repo-HackerOS z klonu hammer -> /etc/hammer
     step_atomic_hammer_repo()
@@ -999,7 +995,7 @@ local function main()
     step_copy_desktop_files()
     step_cleanup_updates_repo()
 
-    step_download_vivaldi()
+    step_download_vivaldi(edition)
 
     step_download_hackeros_hacker_tools()
     step_download_steam_bin(edition)
