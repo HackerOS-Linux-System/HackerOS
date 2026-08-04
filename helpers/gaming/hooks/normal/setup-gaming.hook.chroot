@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+echo "========================================================"
+echo "  HackerOS Gaming: konfiguracja usług systemowych..."
+echo "========================================================"
+
+# Plik .service trafia do systemu poprzez includes.chroot_after_packages,
+# ale samo skopiowanie pliku do /etc/systemd/system/ NIE wystarczy, żeby
+# systemd go włączył przy starcie - trzeba jawnie wywołać "systemctl
+# enable" (tak jak robi to postinst pakietów .deb), inaczej usługa istnieje,
+# ale nigdy się nie uruchamia.
+if [ -f /etc/systemd/system/hackeros-game-mode.service ]; then
+    systemctl enable hackeros-game-mode.service
+else
+    echo "Ostrzeżenie: /etc/systemd/system/hackeros-game-mode.service nie istnieje - pomijam enable."
+fi
+
+echo "========================================================"
+echo "  HackerOS Gaming: konfiguracja zakończona sukcesem!"
+echo "========================================================"
