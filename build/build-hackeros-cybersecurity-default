@@ -1,1 +1,121 @@
+#!/usr/bin/env lua5.5
 
+-- =====================================================================
+-- build-hackeros-cybersecurity-default
+--
+-- Ta edycja NIE korzysta z live-build (jak reszta edycji) - korzysta z
+-- osobnego narzedzia "hackeros-builder", ktore czyta config/config.hk w
+-- formacie [project]/[account]/[auth]/[release] (patrz helpers/cybersecurity-default/config.hk)
+-- i buduje zarowno obraz kontenerowy (OCI), jak i ISO.
+--
+-- Ten plik byl wczesniej calkowicie pusty (0 bajtow) - edycja
+-- --cybersecurity-default nie robila NIC.
+-- =====================================================================
+
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd, allow_fail)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok == true or ok == 0 then
+        return true
+    end
+    if allow_fail then
+        io.stderr:write("Ostrzezenie: polecenie nie powiodlo sie (kontynuuje): " .. cmd .. "\n")
+        return false
+    end
+    io.stderr:write("Blad: polecenie nie powiodlo sie: " .. cmd .. "\n")
+    os.exit(1)
+end
+
+local function exists(path)
+    return os.execute("test -e " .. quote(path)) == true
+end
+
+-- =====================================================================
+-- KROK 1: SKLADANIE config/ Z helpers/cybersecurity + helpers/cybersecurity-default
+-- =====================================================================
+-- Tak samo jak przy edycji cybersecurity: kopiujemy CALA zawartosc
+-- helpers/cybersecurity/ (hooki, package-lists, archives, includes...) do
+-- config/, a NASTEPNIE na wierzch kopiujemy CALA zawartosc
+-- helpers/cybersecurity-default/ (config.hk, bootstrap) - dzieki temu
+-- config/config.hk (wymagane przez hackeros-builder: "musi zawierac
+-- config/config.hk") pochodzi z cybersecurity-default, a reszta configu
+-- (hooki/pakiety/include'y) jest dziedziczona z cybersecurity.
+sh("mkdir -p config")
+sh("cp -r helpers/cybersecurity/. config/")
+sh("cp -r helpers/cybersecurity-default/. config/")
+
+-- =====================================================================
+-- KROK 2: TOKEN DO [auth] -> token W config/config.hk
+-- =====================================================================
+-- Token classic (uprawnienia do org HackerOS-Linux-System) jest wstrzykiwany
+-- przez CI z sekretu GitHub Actions o nazwie "cybersecurity-default"
+-- (patrz .github/workflows/build.yml: env CYBERSECURITY_DEFAULT_TOKEN).
+-- Lokalnie (poza CI) mozna go tez ustawic recznie ta sama zmienna
+-- srodowiskowa przed uruchomieniem build.lua --cybersecurity-default.
+local CONFIG_HK = "config/config.hk"
+
+local token = os.getenv("CYBERSECURITY_DEFAULT_TOKEN") or ""
+if token == "" then
+    io.stderr:write(
+        "Ostrzezenie: zmienna srodowiskowa CYBERSECURITY_DEFAULT_TOKEN jest pusta - " ..
+        "config/config.hk zostanie zapisany z pustym tokenem w [auth] -> token. " ..
+        "hackeros-builder prawdopodobnie odmowi publikacji bez waznego tokena.\n"
+    )
+end
+
+if exists(CONFIG_HK) then
+    local f = io.open(CONFIG_HK, "r")
+    local content = f:read("*a")
+    f:close()
+
+    -- Podmieniamy linie "-> token => ..." (pusta lub nie) na wartosc z env.
+    local escaped_token = token:gsub("%%", "%%%%")
+    local new_content, n = content:gsub(
+        "(%-%>%s*token%s*=>)[^\n]*",
+        "%1 " .. escaped_token
+    )
+    if n == 0 then
+        io.stderr:write("Ostrzezenie: nie znaleziono linii '-> token =>' w " .. CONFIG_HK .. " - dopisuje sekcje [auth].\n")
+        new_content = content .. "\n[auth]\n-> token => " .. token .. "\n"
+    end
+
+    local out = io.open(CONFIG_HK, "w")
+    out:write(new_content)
+    out:close()
+else
+    io.stderr:write("Blad: nie znaleziono " .. CONFIG_HK .. " po skopiowaniu helpers/cybersecurity-default - przerywam.\n")
+    os.exit(1)
+end
+
+-- =====================================================================
+-- KROK 3: BUDOWA KONTENERA + ISO PRZEZ hackeros-builder
+-- =====================================================================
+-- (Binarki bedm / bedm-greeter NIE są tu pobierane - to binarki środowiska
+-- Blue, pobierane w build/build-hackeros-blue.)
+local WORKDIR = "hackeros-build-work-cybersecurity-default"
+local OUTPUT  = "HackerOS-cybersecurity-default.iso"
+
+if os.execute("command -v hackeros-builder >/dev/null 2>&1") ~= true then
+    io.stderr:write(
+        "Blad: polecenie 'hackeros-builder' nie jest dostepne w PATH.\n" ..
+        "Ta edycja wymaga zainstalowania hackeros-builder w kroku CI PRZED " ..
+        "uruchomieniem build.lua --cybersecurity-default (analogicznie do kroku " ..
+        "'Instalacja live-build' dla pozostalych edycji). Zobacz .github/workflows/build.yml.\n"
+    )
+    os.exit(1)
+end
+
+-- Wymaga roota (debootstrap/chroot/mount wewnatrz hackeros-builder).
+-- "build all" buduje zarowno obraz kontenerowy (OCI), jak i ISO z tego
+-- samego config/.
+sh(
+    "sudo hackeros-builder " ..
+    "--project " .. quote(".") .. " " ..
+    "--workdir " .. quote(WORKDIR) .. " " ..
+    "--output " .. quote(OUTPUT) .. " " ..
+    "build all"
+)
