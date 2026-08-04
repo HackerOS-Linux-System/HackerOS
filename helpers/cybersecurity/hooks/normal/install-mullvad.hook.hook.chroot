@@ -1,6 +1,18 @@
-sudo curl -fsSLo /usr/share/keyrings/mullvad-keyring.asc https://repository.mullvad.net/deb/mullvad-keyring.asc
+#!/bin/sh
+set -e
 
-echo "deb [signed-by=/usr/share/keyrings/mullvad-keyring.asc arch=$( dpkg --print-architecture )] https://repository.mullvad.net/deb/stable stable main" | sudo tee /etc/apt/sources.list.d/mullvad.list
+# POPRAWKA: "apt install mullvad-browser" bez -y czekał w chroocie na
+# interaktywne potwierdzenie ("Continue? [Y/n]"), którego nikt nie mógł
+# podać -> apt kończył się "Abort." i wywalał cały hook/build. Dodajemy -y
+# (plus DEBIAN_FRONTEND=noninteractive na wszelki wypadek dla innych
+# promptów, np. debconf). Hook chroot i tak wykonuje się jako root, więc
+# "sudo" jest zbędne (a w części chrootów na tym etapie sudo może nawet nie
+# być jeszcze zainstalowane).
+export DEBIAN_FRONTEND=noninteractive
 
-sudo apt update
-sudo apt install mullvad-browser
+curl -fsSLo /usr/share/keyrings/mullvad-keyring.asc https://repository.mullvad.net/deb/mullvad-keyring.asc
+
+echo "deb [signed-by=/usr/share/keyrings/mullvad-keyring.asc arch=$(dpkg --print-architecture)] https://repository.mullvad.net/deb/stable stable main" > /etc/apt/sources.list.d/mullvad.list
+
+apt-get update
+apt-get install -y mullvad-browser
