@@ -4,11 +4,37 @@ set -e
 USERNAME="user"
 PASSWORD="live"
 
+# Grupy dodatkowe, o które ma trafić nowy użytkownik. Niektóre z nich (np.
+# "bluetooth") są tworzone dopiero przez konkretne pakiety (bluez itd.) -
+# jeśli dana edycja nie ma takiego pakietu na liście, grupa po prostu nie
+# istnieje w systemie plików chroota, a "useradd -G" z NIEISTNIEJĄCĄ grupą
+# kończy się błędem i przerywa cały hook (set -e), co wywala cały build.
+# Zamiast twardo zakładać, że wszystkie te grupy zawsze istnieją, filtrujemy
+# listę do tych, które faktycznie są dostępne w /etc/group w tym momencie.
+WANTED_GROUPS="sudo,audio,video,cdrom,plugdev,netdev,bluetooth"
+
+EXISTING_GROUPS=""
+IFS=','
+for g in $WANTED_GROUPS; do
+    if getent group "$g" >/dev/null 2>&1; then
+        if [ -z "$EXISTING_GROUPS" ]; then
+            EXISTING_GROUPS="$g"
+        else
+            EXISTING_GROUPS="$EXISTING_GROUPS,$g"
+        fi
+    else
+        echo "Ostrzeżenie: grupa '$g' nie istnieje w chroocie - pomijam ją dla $USERNAME (brakuje pakietu, ktory ja tworzy?)"
+    fi
+done
+unset IFS
+
 # Utwórz użytkownika jeśli nie istnieje
 if ! id "$USERNAME" &>/dev/null; then
-    useradd -m -s /bin/bash \
-        -G sudo,audio,video,cdrom,plugdev,netdev,bluetooth \
-        "$USERNAME"
+    if [ -n "$EXISTING_GROUPS" ]; then
+        useradd -m -s /bin/bash -G "$EXISTING_GROUPS" "$USERNAME"
+    else
+        useradd -m -s /bin/bash "$USERNAME"
+    fi
 fi
 
 # Ustaw hasło
