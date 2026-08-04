@@ -1,0 +1,43 @@
+#!/usr/bin/env lua5.5
+
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+-- Uwaga: kopiowanie helpers/lts do config/ (w tym helpers/lts/bootstrap,
+-- które ustawia LB_DISTRIBUTION="trixie") robi już build.lua w kroku
+-- step_lts_pre_build (EDITION_PRE_BUILD["lts"]), PRZED uruchomieniem tego
+-- skryptu - nie trzeba tego powtarzać tutaj.
+
+-- Edycja LTS bazuje na Debian Stable (trixie), a nie na testing/forky jak
+-- edycja official - debootstrap już zna "trixie" natywnie, więc (w
+-- przeciwieństwie do build-hackeros/build-hackeros-hwde/-hydra/-blue) NIE
+-- podpinamy jej pod skrypt "sid".
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware.
+-- "trixie" to Debian Stable/LTS - w przeciwieństwie do forky (testing) ma
+-- pełne wsparcie security.debian.org, więc NIE wyłączamy --security.
+sh(
+    "lb config " ..
+    "--distribution trixie " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true " ..
+    '--debootstrap-options "--include=gnupg"'
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
