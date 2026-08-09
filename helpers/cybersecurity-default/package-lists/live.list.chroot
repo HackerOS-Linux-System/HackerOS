@@ -2,6 +2,8 @@ live-boot
 live-config
 live-config-systemd
 systemd-sysv
+plymouth
+plymouth-themes
 zsh
 flatpak
 python3.13-venv
@@ -18,9 +20,6 @@ grub2-common
 os-prober
 efibootmgr
 network-manager
-network-manager-gnome
-plasma-nm
-polkit-kde-agent-1
 wpasupplicant
 rfkill
 isc-dhcp-client
@@ -48,6 +47,13 @@ firmware-intel-graphics
 firmware-ti-connectivity
 firmware-zd1211
 firmware-ath9k-htc
+firmware-atheros
+firmware-bnx2
+firmware-bnx2x
+firmware-brcm80211
+firmware-cirrus
+firmware-mediatek
+firmware-nvidia-graphics
 lsb-release
 love
 distrobox
@@ -83,6 +89,19 @@ tor
 proxychains4
 john
 xen-system-amd64
+gdb
+
+# VPN / tunelowanie do engagementów
+wireguard-tools
+openvpn
+sshuttle
+
+# przechwytywanie handshake'y / PMKID (uzupełnienie reaver/bully)
+hcxtools
+hcxdumptool
+
+# klasyczny enum4linux z apt (enum4linux-ng budowany ze źródeł w hooku live/)
+enum4linux
 
 # tools and sde
 sddm
