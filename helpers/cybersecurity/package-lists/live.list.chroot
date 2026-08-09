@@ -111,3 +111,8 @@ tor
 proxychains4
 ufw
 aptitude
+gdb
+
+# analiza ruchu / web - uzupełnienie Wiresharka i Burpa
+zaproxy
+termshark
