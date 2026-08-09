@@ -1,0 +1,14 @@
+[project]
+-> name => hackeros-atomic
+-> tag => stable
+-> selinux => true
+
+[account]
+-> type => organisation
+-> name => HackerOS-Linux-System
+
+[auth]
+-> token => 
+
+[release]
+-> name => forky
