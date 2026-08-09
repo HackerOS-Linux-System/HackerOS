@@ -1,1 +1,589 @@
+#!/bin/bash
+# =====================================================================
+# build-red-team-tools.hook.chroot
+# =====================================================================
+#
+# Ten hook buduje ze źródeł i instaluje w obrazie kilkadziesiąt
+# popularnych narzędzi red teamowych, których NIE MA w Debianie/apt
+# (albo apt ma tylko bardzo stare wersje) - m.in. narzędzia projektu
+# ProjectDiscovery, tomnomnom, OWASP-a, impacket, wpscan, Sliver C2,
+# Metasploit itd. Doinstalowuje też słowniki (SecLists, rockyou.txt) i
+# toolkit do exploit dev (pwntools, GEF, ROPgadget). Narzędzia dostępne
+# już jako pakiety .deb (nmap, sqlmap, john, hashcat, aircrack-ng,
+# wireshark, wireguard-tools, hcxtools...) są zainstalowane zwykłym
+# apt-em w package-lists/live.list.chroot i NIE są tu duplikowane.
+#
+# Skrypt jest celowo "odporny na błędy": budowanie pojedynczego
+# narzędzia NIE przerywa całego builda obrazu (set -e globalnie byłoby
+# tu zabójcze - jedno niedziałające repo/crate/moduł wywaliłoby cały
+# ISO). Zamiast tego każda budowa jest opakowana w funkcję, która łapie
+# błąd, loguje go i leci dalej. Na końcu wypisywane jest podsumowanie
+# (co się udało, co nie) i log trafia do /var/log/hackeros-red-team-build.log
+# wewnątrz obrazu, żeby dało się to zdiagnozować po zbudowaniu ISO.
+#
+# Ten hook musi wykonać się PO podstawowej instalacji pakietów apt
+# (patrz config/package-lists oraz helpers/cybersecurity-default/
+# package-lists/live.list.chroot) - hooki z hooks/live/ uruchamiają się
+# właśnie w tym momencie procesu live-build.
 
+set -u
+export DEBIAN_FRONTEND=noninteractive
+
+LOG_FILE="/var/log/hackeros-red-team-build.log"
+SRC_ROOT="/opt/red-team-tools/src"
+BIN_DIR="/usr/local/bin"
+
+mkdir -p "$SRC_ROOT" "$BIN_DIR"
+: > "$LOG_FILE"
+
+# Cała reszta skryptu leci jednocześnie na stdout/stderr i do pliku logu.
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+BUILT=()
+SKIPPED=()
+FAILED=()
+
+log_section() {
+    echo
+    echo "===================================================================="
+    echo "== $1"
+    echo "===================================================================="
+}
+
+already_installed() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+mark_built()   { BUILT+=("$1");   echo "[OK]      $1 zbudowane i zainstalowane"; }
+mark_skipped() { SKIPPED+=("$1"); echo "[SKIP]    $1 - już obecne w systemie"; }
+mark_failed()  { FAILED+=("$1");  echo "[BŁĄD]    $1 - budowanie nie powiodło się (patrz log wyżej)" >&2; }
+
+# ---------------------------------------------------------------------
+# [1/11] Zależności do budowania (apt) - kompilatory, toolchainy języków
+#       (Go, Rust, Ruby) oraz biblioteki nagłówkowe wymagane przez
+#       poszczególne narzędzia C/C++.
+# ---------------------------------------------------------------------
+log_section "[1/11] Instalacja zależności budowania (apt)"
+
+apt-get update || echo "Ostrzeżenie: apt-get update nie powiodło się, próbuję kontynuować z lokalnym cache" >&2
+
+BUILD_DEPS="
+build-essential
+git
+curl
+wget
+unzip
+cmake
+ninja-build
+meson
+pkg-config
+autoconf
+automake
+libtool
+libtool-bin
+checkinstall
+byacc
+flex
+bison
+golang-go
+rustc
+cargo
+ruby
+ruby-dev
+python3
+python3-dev
+python3-pip
+python3-venv
+pipx
+libssl-dev
+libffi-dev
+libpcap-dev
+libpcre2-dev
+libpcre3-dev
+libcurl4-openssl-dev
+zlib1g-dev
+libbz2-dev
+liblzma-dev
+libsqlite3-dev
+libncurses-dev
+libgmp-dev
+libjson-c-dev
+libunistring-dev
+libjansson-dev
+libyaml-dev
+libmagic-dev
+libxml2-dev
+libxslt1-dev
+"
+# shellcheck disable=SC2086
+apt-get install -y --no-install-recommends $BUILD_DEPS \
+    || echo "Ostrzeżenie: część pakietów budowania mogła się nie zainstalować - poszczególne narzędzia mogą nie zbudować się poprawnie" >&2
+
+# pipx czasem wymaga jawnego doinstalowania ścieżki - upewniamy się, że
+# katalogi binarne pipx/go/cargo trafiają do PATH w tej sesji hooka.
+export HOME="${HOME:-/root}"
+export GOPATH="/opt/red-team-tools/go"
+export GOBIN="$BIN_DIR"
+export CARGO_HOME="/opt/red-team-tools/cargo"
+export PIPX_HOME="/opt/red-team-tools/pipx"
+export PIPX_BIN_DIR="$BIN_DIR"
+mkdir -p "$GOPATH" "$CARGO_HOME" "$PIPX_HOME"
+export PATH="$PATH:/usr/local/go/bin:$GOPATH/bin:$CARGO_HOME/bin:$BIN_DIR"
+
+python3 -m pip install --break-system-packages --upgrade pip pipx >/dev/null 2>&1 || true
+python3 -m pipx ensurepath >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------------
+# Funkcje pomocnicze do budowania wg ekosystemu
+# ---------------------------------------------------------------------
+
+clone_repo() {
+    # $1 = katalog docelowy, $2 = URL repo
+    local dest="$1" repo="$2"
+    if [ -d "$dest/.git" ]; then
+        return 0
+    fi
+    rm -rf "$dest"
+    git clone --depth=1 --quiet "$repo" "$dest"
+}
+
+make_wrapper() {
+    # $1 = nazwa binarki w /usr/local/bin, $2 = polecenie do uruchomienia (z "$@")
+    local bin="$BIN_DIR/$1"
+    cat > "$bin" <<EOF
+#!/bin/sh
+exec $2 "\$@"
+EOF
+    chmod +x "$bin"
+}
+
+# Narzędzia pisane w Go, instalowane bezpośrednio poleceniem "go install".
+# Format: "nazwa_binarki|import_path"
+build_go_tool() {
+    local name="$1" import="$2"
+    if already_installed "$name"; then mark_skipped "$name"; return; fi
+    echo "--> [GO] budowanie $name ($import)"
+    if go install -v "${import}@latest"; then
+        mark_built "$name"
+    else
+        mark_failed "$name"
+    fi
+}
+
+# Narzędzia pisane w Rust, instalowane poleceniem "cargo install".
+build_cargo_tool() {
+    local name="$1" crate="$2"
+    if already_installed "$name"; then mark_skipped "$name"; return; fi
+    echo "--> [RUST] budowanie $name (crate: $crate)"
+    if cargo install --locked --root /usr/local "$crate"; then
+        mark_built "$name"
+    else
+        mark_failed "$name"
+    fi
+}
+
+# Narzędzia pythonowe z PyPI lub bezpośrednio z git+ instalowane
+# izolowanie przez pipx (nie brudzi systemowego pip/venv).
+build_pipx_tool() {
+    local name="$1" pkgspec="$2"
+    if already_installed "$name"; then mark_skipped "$name"; return; fi
+    echo "--> [PYTHON/pipx] budowanie $name ($pkgspec)"
+    if pipx install --force "$pkgspec"; then
+        mark_built "$name"
+    else
+        mark_failed "$name"
+    fi
+}
+
+# Gemy rubinowe budowane/instalowane z RubyGems (kompilują natywne
+# rozszerzenia lokalnie przy instalacji, jeśli takie mają).
+build_gem_tool() {
+    local name="$1" gem="$2"
+    if already_installed "$name"; then mark_skipped "$name"; return; fi
+    echo "--> [RUBY] budowanie $name (gem: $gem)"
+    if gem install --no-document "$gem"; then
+        mark_built "$name"
+    else
+        mark_failed "$name"
+    fi
+}
+
+# ---------------------------------------------------------------------
+# [2/11] Narzędzia pisane w Go (rekonesans, skanowanie, fuzzing web)
+# ---------------------------------------------------------------------
+log_section "[2/11] Budowanie narzędzi Go (~21 narzędzi)"
+
+GO_TOOLS="
+subfinder|github.com/projectdiscovery/subfinder/v2/cmd/subfinder
+httpx|github.com/projectdiscovery/httpx/cmd/httpx
+nuclei|github.com/projectdiscovery/nuclei/v3/cmd/nuclei
+naabu|github.com/projectdiscovery/naabu/v2/cmd/naabu
+katana|github.com/projectdiscovery/katana/cmd/katana
+dnsx|github.com/projectdiscovery/dnsx/cmd/dnsx
+tlsx|github.com/projectdiscovery/tlsx/cmd/tlsx
+interactsh-client|github.com/projectdiscovery/interactsh/cmd/interactsh-client
+amass|github.com/owasp-amass/amass/v4/cmd/amass
+ffuf|github.com/ffuf/ffuf/v2
+gobuster|github.com/OJ/gobuster/v3
+assetfinder|github.com/tomnomnom/assetfinder
+waybackurls|github.com/tomnomnom/waybackurls
+gau|github.com/lc/gau/v2/cmd/gau
+gowitness|github.com/sensepost/gowitness
+chisel|github.com/jpillora/chisel
+dalfox|github.com/hahwul/dalfox/v2
+subjack|github.com/haccer/subjack
+puredns|github.com/d3mondev/puredns/v2
+hakrawler|github.com/hakluke/hakrawler
+ligolo-ng-proxy|github.com/nicocha30/ligolo-ng/cmd/proxy
+"
+echo "$GO_TOOLS" | while IFS='|' read -r name import; do
+    [ -z "$name" ] && continue
+    build_go_tool "$name" "$import"
+done
+
+# ---------------------------------------------------------------------
+# [3/11] Narzędzia pisane w Rust
+# ---------------------------------------------------------------------
+log_section "[3/11] Budowanie narzędzi Rust (~4 narzędzia)"
+
+build_cargo_tool "rustscan"    "rustscan"
+build_cargo_tool "feroxbuster" "feroxbuster"
+build_cargo_tool "sn0int"      "sn0int"
+build_cargo_tool "rustcat"     "rustcat"
+
+# ---------------------------------------------------------------------
+# [4/11] Narzędzia w C/C++ budowane klasycznie (make/cmake/configure)
+# ---------------------------------------------------------------------
+log_section "[4/11] Budowanie narzędzi C/C++ ze źródeł (~7 narzędzi)"
+
+build_c_masscan() {
+    local name="masscan"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/masscan" "https://github.com/robertdavidgraham/masscan.git" \
+        && make -C "$SRC_ROOT/masscan" -j"$(nproc)" \
+        && install -m 0755 "$SRC_ROOT/masscan/bin/masscan" "$BIN_DIR/masscan" \
+        && mark_built "$name" \
+        || mark_failed "$name"
+}
+
+build_c_zmap() {
+    local name="zmap"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/zmap" "https://github.com/zmap/zmap.git" \
+        && cmake -S "$SRC_ROOT/zmap" -B "$SRC_ROOT/zmap/build" -DCMAKE_BUILD_TYPE=Release \
+        && cmake --build "$SRC_ROOT/zmap/build" -j"$(nproc)" \
+        && cmake --install "$SRC_ROOT/zmap/build" \
+        && mark_built "$name" \
+        || mark_failed "$name"
+}
+
+build_c_radare2() {
+    local name="radare2"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/radare2" "https://github.com/radareorg/radare2.git" \
+        && "$SRC_ROOT/radare2/sys/install.sh" \
+        && mark_built "$name" \
+        || mark_failed "$name"
+}
+
+build_c_aflplusplus() {
+    local name="afl-fuzz"
+    already_installed "$name" && { mark_skipped "AFL++"; return; }
+    echo "--> [C] budowanie AFL++"
+    clone_repo "$SRC_ROOT/aflplusplus" "https://github.com/AFLplusplus/AFLplusplus.git" \
+        && make -C "$SRC_ROOT/aflplusplus" -j"$(nproc)" distrib \
+        && make -C "$SRC_ROOT/aflplusplus" install \
+        && mark_built "AFL++" \
+        || mark_failed "AFL++"
+}
+
+build_c_yara() {
+    local name="yara"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/yara" "https://github.com/VirusTotal/yara.git"
+    (
+        cd "$SRC_ROOT/yara" \
+            && ./bootstrap.sh \
+            && ./configure --enable-cuckoo --enable-magic \
+            && make -j"$(nproc)" \
+            && make install \
+            && ldconfig
+    ) && mark_built "$name" || mark_failed "$name"
+}
+
+build_c_ncrack() {
+    local name="ncrack"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/ncrack" "https://github.com/nmap/ncrack.git"
+    (
+        cd "$SRC_ROOT/ncrack" \
+            && ./configure \
+            && make -j"$(nproc)" \
+            && make install
+    ) && mark_built "$name" || mark_failed "$name"
+}
+
+build_c_crunch() {
+    local name="crunch"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [C] budowanie $name"
+    clone_repo "$SRC_ROOT/crunch" "https://github.com/crunchsec/crunch.git"
+    (
+        cd "$SRC_ROOT/crunch" \
+            && make -j"$(nproc)" \
+            && make install
+    ) && mark_built "$name" || mark_failed "$name"
+}
+
+build_c_masscan
+build_c_zmap
+build_c_radare2
+build_c_aflplusplus
+build_c_yara
+build_c_ncrack
+build_c_crunch
+
+# ---------------------------------------------------------------------
+# [5/11] Narzędzia pythonowe (pipx dla gotowych paczek/entry-pointów,
+#       git clone + wrapper dla narzędzi bez porządnego opakowania na PyPI)
+# ---------------------------------------------------------------------
+log_section "[5/11] Budowanie narzędzi Python (~15 narzędzi)"
+
+PIPX_TOOLS="
+netexec|git+https://github.com/Pennyw0rth/NetExec
+theHarvester|theHarvester
+sherlock|git+https://github.com/sherlock-project/sherlock.git
+wfuzz|wfuzz
+routersploit|git+https://github.com/threat9/routersploit.git
+vol|volatility3
+recon-ng|git+https://github.com/lanmaster53/recon-ng.git
+bloodhound-python|bloodhound
+certipy|certipy-ad
+pwncat-cs|pwncat-cs
+"
+echo "$PIPX_TOOLS" | while IFS='|' read -r name pkg; do
+    [ -z "$name" ] && continue
+    build_pipx_tool "$name" "$pkg"
+done
+
+# impacket - na PyPI nie ma pojedynczej binarki, tylko biblioteka +
+# skrypty w examples/. Klonujemy repo, instalujemy bibliotekę i
+# tworzymy dla każdego skryptu wrapper impacket-<nazwa> w /usr/local/bin
+# (dokładnie tak, jak robi to pakiet "impacket-scripts" w innych dystrybucjach).
+build_impacket() {
+    local marker="$BIN_DIR/impacket-secretsdump"
+    if [ -x "$marker" ]; then mark_skipped "impacket"; return; fi
+    echo "--> [PYTHON] budowanie impacket + skrypty examples/"
+    clone_repo "$SRC_ROOT/impacket" "https://github.com/fortra/impacket.git"
+    if python3 -m pip install --break-system-packages "$SRC_ROOT/impacket"; then
+        local count=0
+        for f in "$SRC_ROOT/impacket"/examples/*.py; do
+            [ -f "$f" ] || continue
+            local base
+            base="$(basename "$f" .py)"
+            make_wrapper "impacket-${base}" "python3 $f"
+            count=$((count + 1))
+        done
+        echo "    utworzono $count wrapperów impacket-*"
+        mark_built "impacket"
+    else
+        mark_failed "impacket"
+    fi
+}
+
+# Narzędzia bez wygodnego pakowania na PyPI - klonujemy i podpinamy
+# wrapperem pod /usr/local/bin, doinstalowując ich requirements.txt.
+build_clone_python_tool() {
+    # $1 = nazwa binarki, $2 = URL repo, $3 = katalog docelowy,
+    # $4 = plik wejściowy (main .py), $5 = interpreter (domyślnie python3)
+    local name="$1" repo="$2" dest="$3" entry="$4"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    echo "--> [PYTHON/git] budowanie $name"
+    clone_repo "$dest" "$repo"
+    if [ -f "$dest/requirements.txt" ]; then
+        python3 -m pip install --break-system-packages -r "$dest/requirements.txt" >/dev/null 2>&1
+    fi
+    if [ -f "$dest/$entry" ]; then
+        make_wrapper "$name" "python3 $dest/$entry"
+        mark_built "$name"
+    else
+        mark_failed "$name"
+    fi
+}
+
+build_impacket
+build_clone_python_tool "spiderfoot" "https://github.com/smicallef/spiderfoot.git" "$SRC_ROOT/spiderfoot" "sf.py"
+build_clone_python_tool "xsstrike"   "https://github.com/s0md3v/XSStrike.git"      "$SRC_ROOT/xsstrike"   "xsstrike.py"
+build_clone_python_tool "dirsearch"  "https://github.com/maurosoria/dirsearch.git" "$SRC_ROOT/dirsearch"  "dirsearch.py"
+build_clone_python_tool "responder"  "https://github.com/lgandx/Responder.git"     "$SRC_ROOT/responder"  "Responder.py"
+
+# ---------------------------------------------------------------------
+# [6/11] Gemy rubinowe
+# ---------------------------------------------------------------------
+log_section "[6/11] Budowanie narzędzi Ruby (~3 narzędzia)"
+
+build_gem_tool "wpscan"     "wpscan"
+build_gem_tool "evil-winrm" "evil-winrm"
+build_gem_tool "cewl"       "cewl"
+
+# ---------------------------------------------------------------------
+# [7/11] Słowniki (wordlisty) - SecLists i rockyou.txt
+# ---------------------------------------------------------------------
+log_section "[7/11] Pobieranie słowników (SecLists, rockyou.txt)"
+
+build_seclists() {
+    local marker="/usr/share/seclists/.hackeros-installed"
+    if [ -f "$marker" ]; then mark_skipped "SecLists"; return; fi
+    echo "--> [WORDLIST] klonowanie SecLists do /usr/share/seclists (duże repo, może chwilę potrwać)"
+    if clone_repo "/usr/share/seclists" "https://github.com/danielmiessler/SecLists.git"; then
+        touch "$marker"
+        mark_built "SecLists"
+    else
+        mark_failed "SecLists"
+    fi
+}
+
+build_rockyou() {
+    local dest="/usr/share/wordlists/rockyou.txt"
+    if [ -f "$dest" ]; then mark_skipped "rockyou.txt"; return; fi
+    echo "--> [WORDLIST] pobieranie rockyou.txt"
+    mkdir -p /usr/share/wordlists
+    if wget -q "https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt" -O "$dest" && [ -s "$dest" ]; then
+        mark_built "rockyou.txt"
+    else
+        rm -f "$dest"
+        mark_failed "rockyou.txt"
+    fi
+}
+
+build_seclists
+build_rockyou
+
+# ---------------------------------------------------------------------
+# [8/11] Exploit dev toolkit - pwntools, GEF (nakładka na GDB), ROPgadget
+# ---------------------------------------------------------------------
+log_section "[8/11] Exploit dev toolkit (pwntools, GEF, ROPgadget)"
+
+build_pipx_tool "pwn"       "pwntools"
+build_pipx_tool "ROPgadget" "ROPgadget"
+
+build_gef() {
+    # GEF (GDB Enhanced Features) - nakładka na GDB do exploit dev / RE.
+    # Instalujemy globalnie: plik gef.py trafia do /opt, a każdy nowy
+    # użytkownik (przez /etc/skel/.gdbinit) dostaje go automatycznie
+    # podpiętego pod GDB. Alternatywą jest pwndbg - GEF wybrano jako
+    # domyślny bo instaluje się jednym plikiem, bez własnego venv.
+    local marker="/opt/gef/gef.py"
+    if [ -f "$marker" ]; then mark_skipped "gef"; return; fi
+    echo "--> [GDB] instalacja GEF"
+    mkdir -p /opt/gef
+    if curl -fsSL "https://gef.blah.cat/py" -o /opt/gef/gef.py && [ -s /opt/gef/gef.py ]; then
+        echo "source /opt/gef/gef.py" > /etc/gdb-gef.conf
+        # /etc/skel -> trafia do każdego nowo tworzonego konta (patrz
+        # config/hooks/normal/user-setup.hook.chroot, tworzy usera "user")
+        mkdir -p /etc/skel
+        if [ -f /etc/skel/.gdbinit ]; then
+            grep -q '/opt/gef/gef.py' /etc/skel/.gdbinit || echo "source /opt/gef/gef.py" >> /etc/skel/.gdbinit
+        else
+            echo "source /opt/gef/gef.py" > /etc/skel/.gdbinit
+        fi
+        # oraz dla roota, żeby działało też w trakcie samego builda/debugowania obrazu
+        if [ -f /root/.gdbinit ]; then
+            grep -q '/opt/gef/gef.py' /root/.gdbinit || echo "source /opt/gef/gef.py" >> /root/.gdbinit
+        else
+            echo "source /opt/gef/gef.py" > /root/.gdbinit
+        fi
+        mark_built "gef"
+    else
+        mark_failed "gef"
+    fi
+}
+build_gef
+
+# ---------------------------------------------------------------------
+# [9/11] Enumeracja Active Directory / Windows (uzupełnienie impacketu)
+# ---------------------------------------------------------------------
+log_section "[9/11] Narzędzia AD/Windows enum (kerbrute, enum4linux-ng, smbmap)"
+
+build_go_tool "kerbrute" "github.com/ropnop/kerbrute"
+build_pipx_tool "smbmap" "smbmap"
+
+build_clone_python_tool "enum4linux-ng" \
+    "https://github.com/cddmp/enum4linux-ng.git" \
+    "$SRC_ROOT/enum4linux-ng" \
+    "enum4linux-ng.py"
+
+# ---------------------------------------------------------------------
+# [10/11] C2 - Sliver
+# ---------------------------------------------------------------------
+log_section "[10/11] Budowanie Sliver C2 (klient + serwer)"
+
+build_sliver() {
+    already_installed "sliver-server" && { mark_skipped "sliver"; return; }
+    echo "--> [GO] budowanie Sliver C2 (może potrwać dłużej niż inne narzędzia Go)"
+    clone_repo "$SRC_ROOT/sliver" "https://github.com/BishopFox/sliver.git"
+    (
+        cd "$SRC_ROOT/sliver" \
+            && go mod download \
+            && go build -o "$BIN_DIR/sliver-server" ./server \
+            && go build -o "$BIN_DIR/sliver-client" ./client
+    )
+    if [ -x "$BIN_DIR/sliver-server" ] && [ -x "$BIN_DIR/sliver-client" ]; then
+        mark_built "sliver"
+    else
+        mark_failed "sliver"
+    fi
+}
+build_sliver
+
+# ---------------------------------------------------------------------
+# [11/11] Metasploit Framework (oficjalny installer omnibus, tak jak w
+#         pełnej edycji cybersecurity - w Default był to spory brak)
+# ---------------------------------------------------------------------
+log_section "[11/11] Instalacja Metasploit Framework"
+
+build_metasploit() {
+    already_installed "msfconsole" && { mark_skipped "metasploit-framework"; return; }
+    echo "--> [MSF] pobieranie i uruchamianie oficjalnego instalatora omnibus"
+    local installer="/tmp/msfinstall"
+    if curl -fsSL "https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb" -o "$installer" \
+        && chmod 755 "$installer" \
+        && "$installer"; then
+        mark_built "metasploit-framework"
+    else
+        mark_failed "metasploit-framework"
+    fi
+    rm -f "$installer"
+}
+build_metasploit
+
+# ---------------------------------------------------------------------
+# Sprzątanie i podsumowanie
+# ---------------------------------------------------------------------
+log_section "Sprzątanie po budowaniu"
+apt-get clean
+rm -rf /var/lib/apt/lists/* /tmp/*
+
+log_section "PODSUMOWANIE budowania narzędzi red team ze źródeł"
+echo "Zbudowano pomyślnie (${#BUILT[@]}):"
+printf '  - %s\n' "${BUILT[@]:-brak}"
+echo
+echo "Pominięto - już zainstalowane (${#SKIPPED[@]}):"
+printf '  - %s\n' "${SKIPPED[@]:-brak}"
+echo
+echo "Nieudane (${#FAILED[@]}):"
+printf '  - %s\n' "${FAILED[@]:-brak}"
+echo
+echo "Pełny log budowania: $LOG_FILE"
+echo "Źródła (do ewentualnego rebuildu / debugowania): $SRC_ROOT"
+
+# Ten hook celowo NIE kończy się błędem (exit != 0), nawet jeśli część
+# narzędzi się nie zbudowała - pojedyncze niedziałające repo/crate nie
+# powinno wywalać całego builda obrazu ISO. Błędy są widoczne w logu
+# i w podsumowaniu powyżej.
+exit 0
