@@ -1,0 +1,244 @@
+#!/usr/bin/hl
+/// Hacker Updater (hup) – przepisany na Hacker Lang
+using <gen 2>
+
+// yq jq notify-send
+# <main/colors>
+# <main/sys>
+# <main/fs>
+
+;; ─── Domyślna konfiguracja ───────────────────────────────────
+% APT_ENABLED: bool      = true
+% APT_UPGRADE: bool      = true
+% APT_DIST_UPGRADE: bool = false
+% APT_AUTOREMOVE: bool   = true
+% APT_AUTOCLEAN: bool    = true
+
+% FLATPAK_ENABLED: bool  = true
+% FWUPD_ENABLED: bool    = false
+% SNAP_ENABLED: bool     = false
+
+% NOTIFY_ENABLED: bool   = true
+% REBOOT_MSG: str        = HackerOS: Reboot required after updates!
+
+% LOG_FILE: str          = /var/log/hup.log
+% LOG_LEVEL: str         = info
+
+% INFO_COLOR: str        = cyan
+% ERROR_COLOR: str       = red
+% SUCCESS_COLOR: str     = green
+% WARNING_COLOR: str     = yellow
+
+;; ─── Kolory ANSI (fallback) ─────────────────────────────────
+% C_RED: str     = \e[31m
+% C_GREEN: str   = \e[32m
+% C_YELLOW: str  = \e[33m
+% C_CYAN: str    = \e[36m
+% C_RESET: str   = \e[0m
+
+;; ─── Pomocnicze funkcje ─────────────────────────────────────
+
+: log_info def
+    ~> [@TIME] INFO: @msg
+    >> echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: @msg" >> @LOG_FILE
+done
+
+: log_error def
+    ::red ERROR: @msg
+    >> echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: @msg" >> @LOG_FILE
+done
+
+: log_success def
+    ::green SUCCESS: @msg
+    >> echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: @msg" >> @LOG_FILE
+done
+
+: log_warn def
+    ::yellow WARN: @msg
+    >> echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: @msg" >> @LOG_FILE
+done
+
+: run_cmd def
+    ;; Uruchamia komendę i zwraca status przez ? ok / ? err
+    > @cmd
+done
+
+: get_debian_info def
+    > grep -E '^VERSION_ID=' /etc/os-release | cut -d'"' -f2 |> @VERSION
+    > grep -E '^PRETTY_NAME=' /etc/os-release | sed -n 's/.*(\(.*\))/\1/p' |> @CODENAME
+    ? err
+        % VERSION: str = unknown
+        % CODENAME: str = unknown
+    done
+done
+
+: save_version def
+    > mkdir -p /var/cache/hup
+    >> echo '{"version":"@VERSION","codename":"@CODENAME"}' > /var/cache/hup/version.json
+done
+
+: reboot_required def
+    ::exists /var/run/reboot-required
+done
+
+: send_notify def
+    > notify-send -u critical "Hacker Updater" "@REBOOT_MSG"
+    ? err
+        -- log_error
+        % msg: str = Notification failed
+    done
+done
+
+: update_apt def
+    ? @APT_ENABLED == false
+        ~> APT disabled – skipping
+        done
+    done
+
+    ~> Updating APT...
+    > apt update -qq
+    ? @APT_UPGRADE == true
+        > apt upgrade -y -qq
+    done
+
+    ;; Dist-upgrade (opcjonalnie)
+    ? @APT_DIST_UPGRADE == true
+        % HOME_DIR: str = /home/@SUDO_USER
+        ? @SUDO_USER ==
+            % HOME_DIR: str = @HOME
+        done
+
+        % TARGET_FILE: str = @HOME_DIR/.hackeros/hup.yaml
+        ::exists @TARGET_FILE
+        ? ok
+            ;; Proste odczytanie target version/codename (wymaga yq)
+            > yq -r '.version // "unknown"' @TARGET_FILE |> @TARGET_VER
+            > yq -r '.codename // "unknown"' @TARGET_FILE |> @TARGET_CODE
+
+            -- get_debian_info
+            ? @VERSION != unknown
+                ? @TARGET_VER != unknown
+                    ;; Porównanie numeryczne przez shell
+                    > test @TARGET_VER -gt @VERSION
+                    ? ok
+                        ~> Newer Debian detected (@TARGET_VER / @TARGET_CODE) – dist-upgrade
+                        > sed -i "s/@CODENAME/@TARGET_CODE/g" /etc/apt/sources.list
+                        > find /etc/apt/sources.list.d -name '*.list' -exec sed -i "s/@CODENAME/@TARGET_CODE/g" {} \;
+                        > apt update -qq
+                        > apt full-upgrade -y -qq
+                        ? ok
+                            % VERSION: str = @TARGET_VER
+                            % CODENAME: str = @TARGET_CODE
+                            -- save_version
+                        done
+                    done
+                done
+            done
+        done
+    done
+
+    ? @APT_AUTOREMOVE == true
+        > apt autoremove -y -qq
+    done
+    ? @APT_AUTOCLEAN == true
+        > apt autoclean -qq
+    done
+done
+
+: update_flatpak def
+    ? @FLATPAK_ENABLED == false
+        ~> Flatpak disabled – skipping
+        done
+    done
+    ~> Updating Flatpak...
+    > flatpak update -y --noninteractive
+done
+
+: update_fwupd def
+    ? @FWUPD_ENABLED == false
+        ~> FWUPD disabled – skipping
+        done
+    done
+    ~> Updating firmware (fwupd)...
+    > fwupdmgr refresh --force
+    > fwupdmgr update -y
+done
+
+: update_snap def
+    ? @SNAP_ENABLED == false
+        ~> Snap disabled – skipping
+        done
+    done
+    ~> Updating Snap...
+    > snap refresh
+done
+
+;; ─── MAIN ───────────────────────────────────────────────────
+
+;; Wymagaj roota
+> id -u |> @UID
+? @UID != 0
+    ::red hup requires sudo
+    > exit 1
+done
+
+;; Home użytkownika (nawet pod sudo)
+% SUDO_USER: str = 
+> printenv SUDO_USER |> @SUDO_USER
+% HOME_DIR: str = /home/@SUDO_USER
+? @SUDO_USER ==
+    > printenv HOME |> @HOME_DIR
+done
+
+;; Opcjonalne nadpisanie configu z YAML (wymaga yq)
+% CONFIG_FILE: str = @HOME_DIR/.config/hacker/hup.yml
+::exists @CONFIG_FILE
+? ok
+    ~> Loading user config from @CONFIG_FILE
+    > yq -r '.apt.enabled // true' @CONFIG_FILE |> @APT_ENABLED
+    > yq -r '.apt.upgrade // true' @CONFIG_FILE |> @APT_UPGRADE
+    > yq -r '.apt.dist_upgrade // false' @CONFIG_FILE |> @APT_DIST_UPGRADE
+    > yq -r '.apt.autoremove // true' @CONFIG_FILE |> @APT_AUTOREMOVE
+    > yq -r '.apt.autoclean // true' @CONFIG_FILE |> @APT_AUTOCLEAN
+    > yq -r '.flatpak.enabled // true' @CONFIG_FILE |> @FLATPAK_ENABLED
+    > yq -r '.fwupd.enabled // false' @CONFIG_FILE |> @FWUPD_ENABLED
+    > yq -r '.snap.enabled // false' @CONFIG_FILE |> @SNAP_ENABLED
+    > yq -r '.notify.enabled // true' @CONFIG_FILE |> @NOTIFY_ENABLED
+    > yq -r '.notify.reboot_message // "HackerOS: Reboot required after updates!"' @CONFIG_FILE |> @REBOOT_MSG
+    > yq -r '.log.file // "/var/log/hup.log"' @CONFIG_FILE |> @LOG_FILE
+done
+
+;; CSS style (bardzo uproszczone – tylko jeśli plik istnieje)
+% CSS_FILE: str = @HOME_DIR/.config/hacker/hup.css
+::exists @CSS_FILE
+? ok
+    ~> Loading CSS styles (basic)
+    ;; Można dodać prosty grep/sed, ale na razie pomijamy pełny parser
+done
+
+;; Start
+> date '+%Y-%m-%d %H:%M:%S' |> @TIME
+% msg: str = Hacker Updater started at @TIME
+-- log_info
+
+-- get_debian_info
+-- save_version
+% msg: str = Current Debian: version @VERSION, codename @CODENAME
+-- log_info
+
+;; Aktualizacje
+-- update_apt
+-- update_flatpak
+-- update_fwupd
+-- update_snap
+
+;; Reboot notification
+-- reboot_required
+? ok
+    ? @NOTIFY_ENABLED == true
+        -- send_notify
+    done
+done
+
+% msg: str = Hacker Updater finished
+-- log_success
