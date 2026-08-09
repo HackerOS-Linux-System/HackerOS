@@ -1,15 +1,309 @@
-wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -O /usr/share/wordlists/rockyou.txt
+#!/bin/bash
+# =====================================================================
+# setup-cybersecurity-tools.hook.chroot
+# =====================================================================
+#
+# Instaluje w pełnej (GUI) edycji cybersecurity narzędzia, których nie
+# da się prosto dorzucić przez apt (bo mają własny instalator, żyją
+# na GitHub Releases, albo wymagają osobnego repozytorium apt): Burp
+# Suite Community, Metasploit, Ghidra, BloodHound + Neo4j, VSCodium,
+# Gophish, linpeas, Nikto i Commix. OWASP ZAP i termshark są zwykłymi
+# pakietami apt - patrz package-lists/live.list.chroot, nie są tu
+# duplikowane.
+#
+# POPRAWKA (refaktor): poprzednia wersja tego hooka nie miała ani
+# "set -e", ani żadnej obsługi błędów, a URL Burpa był zahardkodowany
+# na sztywno na wersję "2024.1.1", która prędzej czy później przestanie
+# istnieć pod tym adresem i cały krok zacznie się cicho wywalać. Tak
+# jak w helpers/gaming/hooks/live/heroic-games-launcher.hook.chroot,
+# każdy krok pobiera teraz NAJNOWSZĄ dostępną wersję dynamicznie.
+#
+# Styl błędoodporności jest taki sam jak w
+# helpers/cybersecurity-default/hooks/live/build-red-team-tools.hook.chroot:
+# każde narzędzie instalowane jest w osobnej funkcji, błąd jednego
+# kroku jest logowany i NIE przerywa reszty hooka (dlatego nie ma
+# globalnego "set -e" na poziomie całego pliku - ale każda funkcja
+# wewnątrz siebie używa "set -e", żeby nie trzeba było ręcznie
+# sprawdzać kodu wyjścia po każdej linijce).
 
-wget "https://portswigger.net/burp/releases/download?product=community&version=2024.1.1&type=Linux" -O burp_install.sh
-chmod +x burp_install.sh
-./burp_install.sh
+set -u
+export DEBIAN_FRONTEND=noninteractive
 
-wget https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -O /opt/linpeas.sh
+LOG_FILE="/var/log/hackeros-cybersecurity-tools.log"
+OPT_DIR="/opt"
+BIN_DIR="/usr/local/bin"
 
-curl https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb > msfinstall && chmod 755 msfinstall && ./msfinstall
+mkdir -p "$OPT_DIR" "$BIN_DIR"
+: > "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# Nikto
-git clone https://github.com/sullo/nikto /opt/nikto
+BUILT=()
+FAILED=()
+SKIPPED=()
 
-# Commix
-git clone https://github.com/commixproject/commix.git /opt/commix
+log_section() {
+    echo
+    echo "===================================================================="
+    echo "== $1"
+    echo "===================================================================="
+}
+
+already_installed() { command -v "$1" >/dev/null 2>&1; }
+mark_built()   { BUILT+=("$1");   echo "[OK]   $1 zainstalowane"; }
+mark_skipped() { SKIPPED+=("$1"); echo "[SKIP] $1 - już obecne w systemie"; }
+mark_failed()  { FAILED+=("$1");  echo "[BŁĄD] $1 - instalacja nie powiodła się (patrz log wyżej)" >&2; }
+
+# apt-get dla zależności instalatorów poniżej (jq do parsowania JSON z
+# GitHub API, dirmngr/gpg do kluczy repozytoriów firm trzecich).
+apt-get update || echo "Ostrzeżenie: apt-get update nie powiodło się, kontynuuję z lokalnym cache" >&2
+apt-get install -y --no-install-recommends jq curl wget gpg dirmngr ca-certificates unzip openjdk-17-jre-headless \
+    || echo "Ostrzeżenie: część zależności pomocniczych mogła się nie zainstalować" >&2
+
+# ---------------------------------------------------------------------
+# [1/9] Wordlisty - rockyou.txt
+# ---------------------------------------------------------------------
+log_section "[1/9] Wordlisty (rockyou.txt)"
+
+install_rockyou() {
+    local dest="/usr/share/wordlists/rockyou.txt"
+    [ -f "$dest" ] && { mark_skipped "rockyou.txt"; return; }
+    ( set -e
+      mkdir -p /usr/share/wordlists
+      wget -q "https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt" -O "$dest"
+      [ -s "$dest" ]
+    ) && mark_built "rockyou.txt" || { rm -f "$dest"; mark_failed "rockyou.txt"; }
+}
+install_rockyou
+
+# ---------------------------------------------------------------------
+# [2/9] Burp Suite Community - zawsze NAJNOWSZA wersja (dynamicznie)
+# ---------------------------------------------------------------------
+log_section "[2/9] Burp Suite Community Edition (najnowsza wersja)"
+
+install_burpsuite() {
+    already_installed "burpsuite" && { mark_skipped "Burp Suite"; return; }
+    ( set -e
+      # Bez parametru "&version=" PortSwigger zwraca instalator
+      # NAJNOWSZEJ wersji Community - to eliminuje sztywno wpisany
+      # numer wersji, który się starzeje.
+      local url="https://portswigger.net/burp/releases/download?product=community&type=Linux"
+      local installer="/tmp/burp_install.sh"
+      curl -fsSL "$url" -o "$installer"
+      [ -s "$installer" ]
+      chmod +x "$installer"
+      # Instalator PortSwiggera jest interaktywny (pyta o ścieżkę) -
+      # tryb "-q" wymusza ciche/domyślne odpowiedzi.
+      "$installer" -q
+      rm -f "$installer"
+    ) && mark_built "Burp Suite" || mark_failed "Burp Suite"
+}
+install_burpsuite
+
+# ---------------------------------------------------------------------
+# [3/9] Metasploit Framework (oficjalny installer omnibus)
+# ---------------------------------------------------------------------
+log_section "[3/9] Metasploit Framework"
+
+install_metasploit() {
+    already_installed "msfconsole" && { mark_skipped "metasploit-framework"; return; }
+    ( set -e
+      local installer="/tmp/msfinstall"
+      curl -fsSL "https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb" -o "$installer"
+      chmod 755 "$installer"
+      "$installer"
+      rm -f "$installer"
+    ) && mark_built "metasploit-framework" || mark_failed "metasploit-framework"
+}
+install_metasploit
+
+# ---------------------------------------------------------------------
+# [4/9] linpeas / Nikto / Commix - proste narzędzia pomocnicze
+# ---------------------------------------------------------------------
+log_section "[4/9] linpeas, Nikto, Commix"
+
+install_linpeas() {
+    [ -f "$OPT_DIR/linpeas.sh" ] && { mark_skipped "linpeas"; return; }
+    ( set -e
+      wget -q "https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh" -O "$OPT_DIR/linpeas.sh"
+      chmod +x "$OPT_DIR/linpeas.sh"
+      [ -s "$OPT_DIR/linpeas.sh" ]
+    ) && mark_built "linpeas" || mark_failed "linpeas"
+}
+
+clone_and_wrap() {
+    # $1 = nazwa binarki, $2 = repo, $3 = katalog docelowy,
+    # $4 = plik wejściowy, $5 = interpreter (python3 / perl / ...)
+    local name="$1" repo="$2" dest="$3" entry="$4" interpreter="${5:-python3}"
+    already_installed "$name" && { mark_skipped "$name"; return; }
+    ( set -e
+      [ -d "$dest/.git" ] || git clone --depth=1 --quiet "$repo" "$dest"
+      [ -f "$dest/$entry" ]
+      cat > "$BIN_DIR/$name" <<EOF
+#!/bin/sh
+exec $interpreter "$dest/$entry" "\$@"
+EOF
+      chmod +x "$BIN_DIR/$name"
+    ) && mark_built "$name" || mark_failed "$name"
+}
+
+install_linpeas
+clone_and_wrap "nikto"  "https://github.com/sullo/nikto"              "$OPT_DIR/nikto"  "program/nikto.pl" "perl"
+clone_and_wrap "commix" "https://github.com/commixproject/commix.git" "$OPT_DIR/commix" "commix.py"         "python3"
+
+# ---------------------------------------------------------------------
+# [5/9] Ghidra (reverse engineering) - najnowszy release z GitHuba
+# ---------------------------------------------------------------------
+log_section "[5/9] Ghidra"
+
+install_ghidra() {
+    [ -d "$OPT_DIR/ghidra" ] && { mark_skipped "Ghidra"; return; }
+    ( set -e
+      local api="https://api.github.com/repos/NationalSecurityAgency/ghidra/releases/latest"
+      local url
+      url=$(curl -fsSL "$api" | jq -r '.assets[] | select(.name | test("^ghidra_.*_PUBLIC_.*\\.zip$")) | .browser_download_url' | head -n1)
+      [ -n "$url" ] && [ "$url" != "null" ]
+      local zip="/tmp/ghidra.zip"
+      curl -fsSL "$url" -o "$zip"
+      unzip -q "$zip" -d /tmp/ghidra-extract
+      local extracted_dir
+      extracted_dir=$(find /tmp/ghidra-extract -maxdepth 1 -mindepth 1 -type d | head -n1)
+      mv "$extracted_dir" "$OPT_DIR/ghidra"
+      rm -rf "$zip" /tmp/ghidra-extract
+      ln -sf "$OPT_DIR/ghidra/ghidraRun" "$BIN_DIR/ghidra"
+      # wpis w menu aplikacji
+      cat > /usr/share/applications/ghidra.desktop <<EOF
+[Desktop Entry]
+Name=Ghidra
+Comment=Narzędzie do inżynierii wstecznej (NSA)
+Exec=$OPT_DIR/ghidra/ghidraRun
+Icon=$OPT_DIR/ghidra/support/ghidra.ico
+Terminal=false
+Type=Application
+Categories=Security;Development;
+EOF
+    ) && mark_built "Ghidra" || mark_failed "Ghidra"
+}
+install_ghidra
+
+# ---------------------------------------------------------------------
+# [6/9] Neo4j + BloodHound GUI (BloodHound.py/impacket są już w
+#       cybersecurity-default - tu dokładamy samą wizualizację grafu)
+# ---------------------------------------------------------------------
+log_section "[6/9] Neo4j + BloodHound (GUI)"
+
+install_neo4j() {
+    already_installed "neo4j" && { mark_skipped "Neo4j"; return; }
+    ( set -e
+      curl -fsSL "https://debian.neo4j.com/neotechnology.gpg.key" -o /usr/share/keyrings/neo4j.asc
+      echo "deb [signed-by=/usr/share/keyrings/neo4j.asc] https://debian.neo4j.com stable latest" > /etc/apt/sources.list.d/neo4j.list
+      apt-get update
+      apt-get install -y neo4j
+      systemctl enable neo4j || true
+    ) && mark_built "Neo4j" || mark_failed "Neo4j"
+}
+
+install_bloodhound_gui() {
+    [ -f "$OPT_DIR/BloodHound/BloodHound" ] && { mark_skipped "BloodHound GUI"; return; }
+    ( set -e
+      local api="https://api.github.com/repos/SpecterOps/BloodHound-Legacy/releases/latest"
+      local url
+      url=$(curl -fsSL "$api" | jq -r '.assets[] | select(.name | test("linux-x64\\.(zip|tar\\.gz)$")) | .browser_download_url' | head -n1)
+      [ -n "$url" ] && [ "$url" != "null" ]
+      local archive="/tmp/bloodhound.zip"
+      curl -fsSL "$url" -o "$archive"
+      mkdir -p "$OPT_DIR/BloodHound"
+      unzip -q "$archive" -d "$OPT_DIR/BloodHound"
+      chmod +x "$OPT_DIR/BloodHound/BloodHound" 2>/dev/null || true
+      ln -sf "$OPT_DIR/BloodHound/BloodHound" "$BIN_DIR/bloodhound"
+      rm -f "$archive"
+    ) && mark_built "BloodHound GUI" || mark_failed "BloodHound GUI"
+}
+
+install_neo4j
+install_bloodhound_gui
+
+# ---------------------------------------------------------------------
+# [7/9] VSCodium (oficjalne repozytorium apt)
+# ---------------------------------------------------------------------
+log_section "[7/9] VSCodium"
+
+install_vscodium() {
+    already_installed "codium" && { mark_skipped "VSCodium"; return; }
+    ( set -e
+      curl -fsSL "https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg" \
+        | gpg --dearmor -o /usr/share/keyrings/vscodium.gpg
+      echo "deb [signed-by=/usr/share/keyrings/vscodium.gpg] https://download.vscodium.com/debs vscodium main" > /etc/apt/sources.list.d/vscodium.list
+      apt-get update
+      apt-get install -y codium
+    ) && mark_built "VSCodium" || mark_failed "VSCodium"
+}
+install_vscodium
+
+# ---------------------------------------------------------------------
+# [8/9] Gophish (symulacje phishingowe) - budowane ze źródeł (Go)
+# ---------------------------------------------------------------------
+log_section "[8/9] Gophish"
+
+install_gophish() {
+    already_installed "gophish" && { mark_skipped "gophish"; return; }
+    ( set -e
+      command -v go >/dev/null 2>&1 || apt-get install -y --no-install-recommends golang-go
+      local src="$OPT_DIR/gophish-src"
+      [ -d "$src/.git" ] || git clone --depth=1 --quiet "https://github.com/gophish/gophish.git" "$src"
+      ( cd "$src" && go build -o "$OPT_DIR/gophish/gophish" . )
+      mkdir -p "$OPT_DIR/gophish"
+      cp -r "$src"/{config.json,static,templates} "$OPT_DIR/gophish/" 2>/dev/null || true
+      ln -sf "$OPT_DIR/gophish/gophish" "$BIN_DIR/gophish"
+      echo "Uwaga: Gophish przy pierwszym uruchomieniu generuje losowe" \
+           "hasło admina panelu - sprawdź logi 'gophish' po starcie." \
+           > "$OPT_DIR/gophish/README-HackerOS.txt"
+    ) && mark_built "gophish" || mark_failed "gophish"
+}
+install_gophish
+
+# ---------------------------------------------------------------------
+# [9/9] Wireshark - przechwytywanie ruchu bez roota
+# ---------------------------------------------------------------------
+log_section "[9/9] Wireshark - capture bez uprawnień roota"
+
+fix_wireshark_capture() {
+    if ! command -v dumpcap >/dev/null 2>&1; then
+        mark_skipped "wireshark-nonroot-capture (brak dumpcap - czy pakiet wireshark jest zainstalowany?)"
+        return
+    fi
+    ( set -e
+      getent group wireshark >/dev/null 2>&1 || groupadd wireshark
+      chgrp wireshark "$(command -v dumpcap)"
+      chmod 750 "$(command -v dumpcap)"
+      setcap cap_net_raw,cap_net_admin=eip "$(command -v dumpcap)"
+      # user "user" jest tworzony dopiero w config/hooks/normal/user-setup.hook.chroot;
+      # jeśli już istnieje w tym momencie, dorzucamy go do grupy od razu,
+      # w przeciwnym razie user-setup i tak doda go ręcznie później.
+      id user >/dev/null 2>&1 && usermod -aG wireshark user
+    ) && mark_built "wireshark-nonroot-capture" || mark_failed "wireshark-nonroot-capture"
+}
+fix_wireshark_capture
+
+# ---------------------------------------------------------------------
+# Sprzątanie i podsumowanie
+# ---------------------------------------------------------------------
+log_section "Sprzątanie"
+apt-get clean
+rm -rf /var/lib/apt/lists/* /tmp/*
+
+log_section "PODSUMOWANIE instalacji narzędzi cybersecurity (GUI)"
+echo "Zainstalowano pomyślnie (${#BUILT[@]}):"
+printf '  - %s\n' "${BUILT[@]:-brak}"
+echo
+echo "Pominięto - już obecne (${#SKIPPED[@]}):"
+printf '  - %s\n' "${SKIPPED[@]:-brak}"
+echo
+echo "Nieudane (${#FAILED[@]}):"
+printf '  - %s\n' "${FAILED[@]:-brak}"
+echo
+echo "Pełny log: $LOG_FILE"
+
+# Podobnie jak w build-red-team-tools.hook.chroot: pojedyncze nieudane
+# narzędzie nie powinno wywalać całego builda ISO, więc hook zawsze
+# kończy się sukcesem - błędy widać w podsumowaniu i w logu.
+exit 0
