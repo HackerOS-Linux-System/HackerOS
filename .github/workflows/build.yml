@@ -192,11 +192,17 @@ jobs:
           # config/config.hk. NIE pobieramy gotowej binarki z GitHub Releases -
           # klonujemy źródła i budujemy lokalnie na runnerze:
           #   1. git clone HackerOS-Builder.git
-          #   2. go mod vendor   (ściąga zależności do vendor/, wymaga sieci)
-          #   3. make            (kompiluje z vendor/, offline, -mod=vendor)
+          #   2. go mod tidy     (dogenerowuje go.sum -- NIE jest commitowany
+          #                       w repo, patrz README hackeros-builder;
+          #                       "go mod vendor" bez pelnego go.sum odmawia
+          #                       dzialania w domyslnym trybie -mod=readonly
+          #                       z bledem "missing go.sum entry")
+          #   3. go mod vendor   (ściąga zależności do vendor/, wymaga sieci)
+          #   4. make            (kompiluje z vendor/, offline, -mod=vendor)
           rm -rf /tmp/hackeros-builder-src
           git clone --depth 1 https://github.com/HackerOS-Linux-System/HackerOS-Builder.git /tmp/hackeros-builder-src
           cd /tmp/hackeros-builder-src
+          go mod tidy
           go mod vendor
           make
           sudo install -Dm755 hackeros-builder /usr/local/bin/hackeros-builder
