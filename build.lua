@@ -261,7 +261,7 @@ local EDITIONS = {
         pre_build    = "xfce",
     },
     atomic = {
-        build_script = "build/build-hackeros",
+        build_script = "build/build-hackeros-atomic",
         placeholder  = false,
         pre_build    = "atomic",
     },
@@ -299,7 +299,8 @@ Dostępne flagi edycji (można podać tylko jedną naraz):
   --lts                      Edycja LTS (helpers/lts, build/build-hackeros-lts)
   --gnome                    Edycja GNOME (helpers/gnome)
   --xfce                     Edycja XFCE (helpers/xfce, build/build-hackeros-xfce)
-  --atomic                   Edycja Atomic (Hammer zamiast HackerOS-Store, helpers/atomic)
+  --atomic                   Edycja Atomic (Hammer zamiast HackerOS-Store, helpers/atomic,
+                              ISO budowane przez hackeros-builder zamiast live-build)
   --nvidia                   Dodatek NVIDIA (helpers/NVIDIA)
   --cybersecurity            Edycja Cybersecurity (branch cybersecurity,
                               build/build-hackeros-cybersecurity)
