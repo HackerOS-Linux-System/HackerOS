@@ -100,8 +100,15 @@ sshuttle
 hcxtools
 hcxdumptool
 
-# klasyczny enum4linux z apt (enum4linux-ng budowany ze źródeł w hooku live/)
-enum4linux
+# enum4linux (klasyczny, Perl) NIE jest dostepny w oficjalnych repo Debiana
+# (main/contrib/non-free/non-free-firmware) -- to pakiet wystepujacy
+# wylacznie w repo Kali Linux, ktorego ta edycja nie konfiguruje (uzywamy
+# czystego deb.debian.org). Probowaliśmy jednak od razu instalowac
+# "enum4linux" tutaj co konczylo sie bledem "E: Unable to locate package
+# enum4linux" na etapie apt-get install. Pokrywa to w calosci
+# enum4linux-ng (nastepca, aktywnie rozwijany, wiecej funkcji - JSON/YAML
+# export), ktory jest juz budowany ze zrodel w hooku
+# helpers/cybersecurity-default/hooks/live/build-red-team-tools.hook.chroot.
 
 # tools and sde
 sddm
