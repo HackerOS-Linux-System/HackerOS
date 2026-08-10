@@ -86,6 +86,10 @@ build-hackeros-xfce linguist-detectable=true
 build-hackeros-xfce linguist-documentation=false
 build-hackeros-xfce linguist-language=LUA
 
+build-hackeros-cybersecurity-atomic linguist-detectable=true
+build-hackeros-cybersecurity-atomic linguist-documentation=false
+build-hackeros-cybersecurity-atomic linguist-language=LUA
+
 build-hackeros-cybersecurity-default linguist-detectable=true
 build-hackeros-cybersecurity-default linguist-documentation=false
 build-hackeros-cybersecurity-default linguist-language=LUA
