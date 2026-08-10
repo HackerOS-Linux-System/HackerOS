@@ -1,0 +1,137 @@
+#!/usr/bin/env lua5.5
+
+-- =====================================================================
+-- build-hackeros-atomic
+--
+-- Ta edycja pobiera DOKLADNIE to samo co official (patrz build.lua: main()
+-- wywoluje dla atomic te same kroki co dla official -- step_clone_updates_repo,
+-- step_download_apps, step_download_bin_tools, step_extract_archives,
+-- step_copy_desktop_files, step_download_vivaldi, step_download_hackeros_hacker_tools,
+-- step_download_steam_bin, step_download_games, step_hacker_lang, step_hnm_skel,
+-- step_python_venv, step_chmod_static_files -- plus dodatkowo
+-- step_atomic_pre_build: binarka hammer, repo-HackerOS -> /etc/hammer,
+-- i na koncu kopiuje helpers/atomic/* do config/, w tym helpers/atomic/config.hk
+-- ktory ustawia [project]/[account]/[release] dla hackeros-builder).
+--
+-- RÓŻNICA wzgledem pozostalych edycji: NIE uzywa "lb build" (live-build).
+-- Zamiast tego, dokladnie jak build-hackeros-cybersecurity-default, caly
+-- config/ (przygotowany przez build.lua) jest przekazywany do osobnego
+-- narzedzia "hackeros-builder", ktore samo interpretuje strukture
+-- live-build-owa (debootstrap + hooks + package-lists + includes.chroot)
+-- BEZ wywolywania "lb build", buduje obraz OCI (z wstrzykniętym hammer,
+-- /etc/hammer/oci.hk, bez apt/apt-get na finalnie zainstalowanym dysku --
+-- patrz README.md hackeros-builder) i z niego hybrydowe ISO (BIOS+UEFI).
+-- =====================================================================
+
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd, allow_fail)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok == true or ok == 0 then
+        return true
+    end
+    if allow_fail then
+        io.stderr:write("Ostrzezenie: polecenie nie powiodlo sie (kontynuuje): " .. cmd .. "\n")
+        return false
+    end
+    io.stderr:write("Blad: polecenie nie powiodlo sie: " .. cmd .. "\n")
+    os.exit(1)
+end
+
+local function exists(path)
+    return os.execute("test -e " .. quote(path)) == true
+end
+
+-- =====================================================================
+-- KROK 1: DEBOOTSTRAP NIE ZNA JESZCZE "forky" JAKO TAKIEGO
+-- =====================================================================
+-- Ten sam problem co w build/build-hackeros (live-build): debootstrap nie
+-- ma jeszcze gotowego skryptu dla suite "forky" (Debian testing). Dotyczy
+-- to takze hackeros-builder, ktory wewnetrznie wywoluje zwykly
+-- "debootstrap <suite> ..." (patrz internal/rootfs/builder.go w repo
+-- hackeros-builder) -- wiec ten sam symlink jest tu rowniez potrzebny.
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- =====================================================================
+-- KROK 2: TOKEN DO [auth] -> token W config/config.hk
+-- =====================================================================
+-- config/config.hk zostal juz nadpisany zawartoscia helpers/atomic/config.hk
+-- przez build.lua (step_atomic_pre_build -> copy_helper_dir) PRZED
+-- uruchomieniem tego skryptu -- ma juz [project]/[account]/[release],
+-- brakuje tylko [auth] -> token (celowo puste w helpers/atomic/config.hk,
+-- zeby nie trzymac sekretu w repo).
+--
+-- Token classic (uprawnienia do org HackerOS-Linux-System, taki sam zakres
+-- jak dla cybersecurity-default) jest wstrzykiwany przez CI z sekretu
+-- GitHub Actions o nazwie "ATOMIC_TOKEN" (patrz .github/workflows/build.yml).
+-- Lokalnie (poza CI) mozna go tez ustawic recznie ta sama zmienna
+-- srodowiskowa przed uruchomieniem build.lua --atomic.
+local CONFIG_HK = "config/config.hk"
+
+local token = os.getenv("ATOMIC_TOKEN") or ""
+if token == "" then
+    io.stderr:write(
+        "Ostrzezenie: zmienna srodowiskowa ATOMIC_TOKEN jest pusta - " ..
+        "config/config.hk zostanie zapisany z pustym tokenem w [auth] -> token. " ..
+        "hackeros-builder prawdopodobnie odmowi publikacji obrazu OCI bez waznego tokena.\n"
+    )
+end
+
+if exists(CONFIG_HK) then
+    local f = io.open(CONFIG_HK, "r")
+    local content = f:read("*a")
+    f:close()
+
+    -- Podmieniamy linie "-> token => ..." (pusta lub nie) na wartosc z env.
+    local escaped_token = token:gsub("%%", "%%%%")
+    local new_content, n = content:gsub(
+        "(%-%>%s*token%s*=>)[^\n]*",
+        "%1 " .. escaped_token
+    )
+    if n == 0 then
+        io.stderr:write("Ostrzezenie: nie znaleziono linii '-> token =>' w " .. CONFIG_HK .. " - dopisuje sekcje [auth].\n")
+        new_content = content .. "\n[auth]\n-> token => " .. token .. "\n"
+    end
+
+    local out = io.open(CONFIG_HK, "w")
+    out:write(new_content)
+    out:close()
+else
+    io.stderr:write(
+        "Blad: nie znaleziono " .. CONFIG_HK .. " - oczekiwano ze build.lua " ..
+        "(step_atomic_pre_build -> copy_helper_dir(\"helpers/atomic\", false)) " ..
+        "juz go tam skopiowal z helpers/atomic/config.hk. Przerywam.\n"
+    )
+    os.exit(1)
+end
+
+-- =====================================================================
+-- KROK 3: BUDOWA KONTENERA OCI + ISO PRZEZ hackeros-builder (BEZ live-build)
+-- =====================================================================
+local WORKDIR = "hackeros-build-work-atomic"
+local OUTPUT  = "HackerOS-atomic.iso"
+
+if os.execute("command -v hackeros-builder >/dev/null 2>&1") ~= true then
+    io.stderr:write(
+        "Blad: polecenie 'hackeros-builder' nie jest dostepne w PATH.\n" ..
+        "Ta edycja wymaga zainstalowania hackeros-builder w kroku CI PRZED " ..
+        "uruchomieniem build.lua --atomic (analogicznie do kroku 'Instalacja " ..
+        "hackeros-builder' dla edycji cybersecurity-default). Zobacz .github/workflows/build.yml.\n"
+    )
+    os.exit(1)
+end
+
+-- Wymaga roota (debootstrap/chroot/mount wewnatrz hackeros-builder).
+-- "build all" buduje zarowno obraz kontenerowy (OCI, z wstrzyknietym
+-- hammer + /etc/hammer/oci.hk), jak i ISO (z Calamares, bez apt/apt-get
+-- na finalnie zainstalowanym dysku) z tego samego config/.
+sh(
+    "sudo hackeros-builder " ..
+    "--project " .. quote(".") .. " " ..
+    "--workdir " .. quote(WORKDIR) .. " " ..
+    "--output " .. quote(OUTPUT) .. " " ..
+    "build all"
+)
