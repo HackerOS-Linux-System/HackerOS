@@ -2,6 +2,13 @@ live-boot
 live-config
 live-config-systemd
 systemd-sysv
+
+# sudo NIE jest domyslnie pociagane przez apt jako Recommends -- hackeros-builder
+# instaluje pakiety z --no-install-recommends (w przeciwienstwie do domyslnego
+# zachowania apt na live-build), wiec musi byc jawnie na liscie. Bez niego
+# config/hooks/normal/user-setup.hook.chroot wywala sie na braku katalogu
+# /etc/sudoers.d/ (tworzonego przez postinst pakietu sudo).
+sudo
 plymouth
 plymouth-themes
 zsh
