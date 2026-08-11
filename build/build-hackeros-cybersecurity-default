@@ -49,6 +49,29 @@ sh("cp -r helpers/cybersecurity/. config/")
 sh("cp -r helpers/cybersecurity-default/. config/")
 
 -- =====================================================================
+-- KROK 1b: USUWANIE WLASNEJ KONFIGURACJI CALAMARES -- hackeros-builder MA WLASNA
+-- =====================================================================
+-- config/ (baza w tym repo, przygotowana pod live-build) zawiera
+-- config/includes.chroot_after_packages/etc/calamares/ z wlasnymi
+-- modulami/brandingiem Calamares -- ten katalog przetrwa KROK 1 powyzej
+-- (cp -r tylko NADPISUJE/dokleja pliki z helpers/cybersecurity* na
+-- istniejacej bazie config/, nie czysci jej najpierw), wiec bez tego kroku
+-- trafilby do rootfs budowanego przez hackeros-builder.
+--
+-- hackeros-builder SAM wstrzykuje Calamares (patrz
+-- internal/isobuild/installer.go w repo hackeros-builder), ale TYLKO do
+-- oddzielnej, ISO-only kopii rootfs -- NIE do rootfs pakowanego i
+-- wypychanego jako obraz OCI w "build cloud" (ktory ma nie zawierac
+-- instalatora GUI). Dlatego usuwamy caly katalog PRZED wywolaniem
+-- hackeros-builder -- instalator (razem ze swoja konfiguracja) dostaje ISO
+-- wylacznie od hackeros-builder, nie z config/ tego repo.
+local calamaresConfigDir = "config/includes.chroot_after_packages/etc/calamares"
+if exists(calamaresConfigDir) then
+    sh("rm -rf " .. quote(calamaresConfigDir))
+    io.write("Usunieto katalog: " .. calamaresConfigDir .. "\n")
+end
+
+-- =====================================================================
 -- KROK 2: TOKEN DO [auth] -> token W config/config.hk
 -- =====================================================================
 -- Token classic (uprawnienia do org HackerOS-Linux-System) jest wstrzykiwany
@@ -110,12 +133,38 @@ if os.execute("command -v hackeros-builder >/dev/null 2>&1") ~= true then
 end
 
 -- Wymaga roota (debootstrap/chroot/mount wewnatrz hackeros-builder).
--- "build all" buduje zarowno obraz kontenerowy (OCI), jak i ISO z tego
--- samego config/.
+--
+-- HACKEROS_BUILD_TARGET pozwala wybrac co dokladnie hackeros-builder ma
+-- zbudowac: "all" (domyslnie, kontener OCI + ISO), "cloud" (tylko obraz
+-- OCI, bez ISO/Calamares) albo "iso" (tylko ISO -- zaklada ze obraz OCI
+-- juz istnieje w registry pod tagiem z config/config.hk). Ustawiane przez
+-- .github/workflows/build-immutable.yml (input "build_target"); lokalnie
+-- domyslnie "all" jesli zmienna nie jest ustawiona.
+--
+-- UWAGA O JADRZE: w przeciwienstwie do edycji atomic, ten skrypt NIE
+-- dopisuje dynamicznie "linux-image-amd64" do package-lists -- ta edycja
+-- ma dostarczac wlasne jadro przez
+-- helpers/cybersecurity-default/hooks/normal/install-kernel.hook.chroot.
+-- W CHWILI PISANIA TEGO KOMENTARZA TEN HOOK JEST PUSTY (placeholder) --
+-- jesli nie zostanie uzupelniony przed uruchomieniem tego builda, "build
+-- iso" zakonczy sie bledem "nie znaleziono jadra w /boot" (dokladnie jak
+-- w edycji atomic bez wlasnego jadra).
+local buildTarget = os.getenv("HACKEROS_BUILD_TARGET")
+if buildTarget == nil or buildTarget == "" then
+    buildTarget = "all"
+end
+if buildTarget ~= "all" and buildTarget ~= "cloud" and buildTarget ~= "iso" then
+    io.stderr:write(
+        "Blad: HACKEROS_BUILD_TARGET=" .. buildTarget .. " nie jest prawidlowe " ..
+        "(oczekiwano: all / cloud / iso).\n"
+    )
+    os.exit(1)
+end
+
 sh(
     "sudo hackeros-builder " ..
     "--project " .. quote(".") .. " " ..
     "--workdir " .. quote(WORKDIR) .. " " ..
     "--output " .. quote(OUTPUT) .. " " ..
-    "build all"
+    "build " .. buildTarget
 )
