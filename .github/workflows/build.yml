@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       edition:
-        description: "Edycja HackerOS do zbudowania (tylko przy ręcznym uruchomieniu)"
+        description: "Edycja HackerOS do zbudowania (tylko przy ręcznym uruchomieniu). Atomic i cybersecurity-default budują się przez osobny workflow: build-immutable.yml"
         required: false
         default: "official"
         type: choice
@@ -16,11 +16,9 @@ on:
           - blue
           - hwde
           - hydra
-          - cybersecurity-default
           - lts
           - gnome
           - xfce
-          - atomic
           - nvidia
   push:
     branches: [ "official", "cybersecurity" ]
@@ -39,12 +37,14 @@ jobs:
         id: set-matrix
         run: |
           # Edycje "official"
-          OFFICIAL_EDITIONS='["official","gaming","blue","hwde","hydra","lts","gnome","xfce","atomic","nvidia"]'
+          OFFICIAL_EDITIONS='["official","gaming","blue","hwde","hydra","lts","gnome","xfce","nvidia"]'
           # Edycje "cybersecurity" - od teraz budowane na TYM SAMYM branchu co
-          # reszta (helpers/cybersecurity i helpers/cybersecurity-default żyją
-          # w repo obok pozostałych helpers/*, nie na osobnym branchu).
-          CYBERSECURITY_EDITIONS='["cybersecurity","cybersecurity-default"]'
-          ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","cybersecurity-default","lts","gnome","xfce","atomic","nvidia"]'
+          # reszta (helpers/cybersecurity żyje w repo obok pozostałych
+          # helpers/*, nie na osobnym branchu). "cybersecurity-default" NIE
+          # jest tu wliczone -- ta edycja (razem z "atomic") buduje się przez
+          # osobny workflow: build-immutable.yml (nie używa live-build).
+          CYBERSECURITY_EDITIONS='["cybersecurity"]'
+          ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","lts","gnome","xfce","nvidia"]'
           # Opcja "monthly" (uruchamiana ręcznie raz w miesiącu) - buduje tylko
           # official, cybersecurity i nvidia.
           MONTHLY_EDITIONS='["official","cybersecurity","nvidia"]'
@@ -178,48 +178,7 @@ jobs:
           sudo apt-get remove -y live-build || true
           sudo dpkg -i live-build_*.deb
           lb --version
-      - name: Instalacja Go (tylko edycje cybersecurity-default oraz atomic)
-        if: matrix.edition == 'cybersecurity-default' || matrix.edition == 'atomic'
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - name: Budowa hackeros-builder ze źródeł (tylko edycje cybersecurity-default oraz atomic)
-        if: matrix.edition == 'cybersecurity-default' || matrix.edition == 'atomic'
-        run: |
-          # hackeros-builder to osobne narzędzie (nie live-build) używane przez
-          # build/build-hackeros-cybersecurity-default oraz build/build-hackeros-atomic
-          # do zbudowania jednocześnie kontenera OCI oraz ISO na podstawie
-          # config/config.hk. NIE pobieramy gotowej binarki z GitHub Releases -
-          # klonujemy źródła i budujemy lokalnie na runnerze:
-          #   1. git clone HackerOS-Builder.git
-          #   2. go mod tidy     (dogenerowuje go.sum -- NIE jest commitowany
-          #                       w repo, patrz README hackeros-builder;
-          #                       "go mod vendor" bez pelnego go.sum odmawia
-          #                       dzialania w domyslnym trybie -mod=readonly
-          #                       z bledem "missing go.sum entry")
-          #   3. go mod vendor   (ściąga zależności do vendor/, wymaga sieci)
-          #   4. make            (kompiluje z vendor/, offline, -mod=vendor)
-          rm -rf /tmp/hackeros-builder-src
-          git clone --depth 1 https://github.com/HackerOS-Linux-System/HackerOS-Builder.git /tmp/hackeros-builder-src
-          cd /tmp/hackeros-builder-src
-          go mod tidy
-          go mod vendor
-          make
-          sudo install -Dm755 hackeros-builder /usr/local/bin/hackeros-builder
-          cd -
-          hackeros-builder --version || true
       - name: Uruchomienie build.lua (edycja - ${{ matrix.edition }})
-        env:
-          # Sekret GitHub Actions o nazwie "cybersecurity-default" (token
-          # classic z uprawnieniami do org HackerOS-Linux-System) - używany
-          # wyłącznie przez build/build-hackeros-cybersecurity-default do
-          # wypełnienia [auth] -> token w config/config.hk.
-          CYBERSECURITY_DEFAULT_TOKEN: ${{ secrets.CYBERSECURITY_DEFAULT_TOKEN }}
-          # Sekret GitHub Actions o nazwie "ATOMIC_TOKEN" (token classic
-          # z uprawnieniami do org HackerOS-Linux-System) - używany wyłącznie
-          # przez build/build-hackeros-atomic do wypełnienia [auth] -> token
-          # w config/config.hk.
-          ATOMIC_TOKEN: ${{ secrets.ATOMIC_TOKEN }}
         run: |
           chmod +x build.lua
           if [ "${{ matrix.edition }}" = "official" ]; then
