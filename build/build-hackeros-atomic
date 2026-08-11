@@ -145,7 +145,70 @@ kernelList:write(
 kernelList:close()
 
 -- =====================================================================
--- KROK 4: BUDOWA KONTENERA OCI + ISO PRZEZ hackeros-builder (BEZ live-build)
+-- KROK 4: USUWANIE WLASNEJ KONFIGURACJI CALAMARES -- hackeros-builder MA WLASNA
+-- =====================================================================
+-- config/ (przygotowany dla live-build) zaklada ze TO on instaluje i
+-- konfiguruje Calamares (stad "calamares"/"calamares-settings-debian" w
+-- package-lists oraz config/includes.chroot_after_packages/etc/calamares/
+-- z wlasnymi modulami/brandingiem). Dla atomic jest to zbedne i szkodliwe:
+--
+--   - hackeros-builder SAM wstrzykuje Calamares (patrz
+--     internal/isobuild/installer.go w repo hackeros-builder), ale TYLKO
+--     do oddzielnej, ISO-only kopii rootfs -- NIE do rootfs pakowanego i
+--     wypychanego jako obraz OCI w "build cloud". To celowe: obraz OCI
+--     (uzywany do atomowych wdrozen przez "hammer oci deploy") nie ma
+--     zawierac instalatora GUI.
+--
+--   - Gdyby "calamares"/"calamares-settings-debian" zostaly w
+--     package-lists/live.list.chroot, trafilyby do WSZYSTKICH rootfs
+--     budowanych przez hackeros-builder -- w tym do tego pakowanego jako
+--     obraz OCI -- czyli Calamares (i jego config z includes.chroot_after_packages)
+--     moglby wyladowac rowniez na finalnie zainstalowanym/wdrozonym
+--     systemie, czego nie chcemy.
+--
+-- Dlatego dla edycji atomic usuwamy oba wpisy z live.list.chroot oraz caly
+-- katalog includes.chroot_after_packages/etc/calamares PRZED wywolaniem
+-- hackeros-builder -- instalator (razem ze swoja konfiguracja) dostaje ISO
+-- wylacznie od hackeros-builder, nie z config/ tego repo.
+local liveListPath = "config/package-lists/live.list.chroot"
+if exists(liveListPath) then
+    local f = io.open(liveListPath, "r")
+    local content = f:read("*a")
+    f:close()
+
+    local removedNames = { "calamares", "calamares-settings-debian" }
+    local lines = {}
+    for line in (content .. "\n"):gmatch("([^\n]*)\n") do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        local isRemoved = false
+        for _, name in ipairs(removedNames) do
+            if trimmed == name then
+                isRemoved = true
+                break
+            end
+        end
+        if not isRemoved then
+            table.insert(lines, line)
+        else
+            io.write("Usunieto z " .. liveListPath .. ": " .. trimmed .. "\n")
+        end
+    end
+
+    local f2 = io.open(liveListPath, "w")
+    f2:write(table.concat(lines, "\n"))
+    f2:close()
+else
+    io.stderr:write("Ostrzezenie: nie znaleziono " .. liveListPath .. " -- pomijam usuwanie wpisow calamares.\n")
+end
+
+local calamaresConfigDir = "config/includes.chroot_after_packages/etc/calamares"
+if exists(calamaresConfigDir) then
+    sh("rm -rf " .. quote(calamaresConfigDir))
+    io.write("Usunieto katalog: " .. calamaresConfigDir .. "\n")
+end
+
+-- =====================================================================
+-- KROK 5: BUDOWA KONTENERA OCI + ISO PRZEZ hackeros-builder (BEZ live-build)
 -- =====================================================================
 local WORKDIR = "hackeros-build-work-atomic"
 local OUTPUT  = "HackerOS-atomic.iso"
