@@ -1,1 +1,136 @@
+#!/bin/bash
+# =====================================================================
+# install-kernel.hook.chroot
+# =====================================================================
+#
+# Instaluje wlasne jadro HackerOS dla edycji cybersecurity-default,
+# publikowane w osobnym repo:
+#   https://github.com/HackerOS-Linux-System/HackerOS-Kernel
+#
+# Repo publikuje w kazdym wydaniu (GitHub Releases, tag np. "v0.0.1")
+# dwa pliki .deb:
+#   hackeros-kernel-cybersecurity_<wersja jadra>.deb          (obraz jadra)
+#   hackeros-kernel-headers-cybersecurity_<wersja jadra>.deb  (naglowki)
+#
+# Ten hook:
+#   1. znajduje NAJNOWSZE wydanie (najwyzszy tag na stronie /releases),
+#   2. z tego wydania wyciaga DOKLADNE nazwy obu plikow .deb (nie zgaduje
+#      wersji jadra -- czyta ja z rzeczywistej listy assetow wydania, wiec
+#      dziala niezaleznie od tego jaka wersja jadra jest aktualnie
+#      publikowana, np. 7.1, 7.2 itd.),
+#   3. pobiera oba pliki .deb,
+#   4. instaluje je w systemie (apt-get install z lokalnych plikow --
+#      pozwala apt rozwiazac ewentualne zaleznosci z juz skonfigurowanych
+#      repo Debiana, w przeciwienstwie do samego "dpkg -i"),
+#   5. usuwa pobrane pliki .deb,
+#   6. sprawdza ze w /boot faktycznie pojawil sie obraz jadra (vmlinuz-*)
+#      i initrd (initrd.img-*) -- hackeros-builder wymaga obu w kroku
+#      "kopiowanie jadra i initrd" przy budowie ISO, wiec lepiej dostac
+#      czytelny blad tutaj niz dopiero kilka krokow pozniej.
+#
+# W przeciwienstwie do edycji atomic (ktora dostaje zwykle
+# "linux-image-amd64" z Debiana, dopisywane dynamicznie przez
+# build/build-hackeros-atomic), cybersecurity-default UZYWA WLASNEGO
+# jadra -- stad ten hook, a NIE wpis w package-lists.
+#
+# Ten hook MUSI wykonac sie PO skonfigurowaniu apt (ma byc "curl" w
+# systemie -- jest, patrz package-lists/live.list.chroot) i moze
+# wykonac sie w dowolnym momencie wzgledem innych hookow z hooks/normal/
+# (nie zaleza od siebie nawzajem).
 
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+KERNEL_REPO="HackerOS-Linux-System/HackerOS-Kernel"
+RELEASES_URL="https://github.com/${KERNEL_REPO}/releases"
+WORK_DIR="$(mktemp -d /tmp/hackeros-kernel-install.XXXXXX)"
+
+cleanup() {
+    rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+echo "=== install-kernel.hook.chroot: wykrywanie najnowszego wydania ${KERNEL_REPO} ==="
+
+# Strona /releases renderuje najnowsze wydanie jako pierwszy wpis
+# "releases/tag/vX.Y.Z" w HTML -- ta sama technika co przy wykrywaniu
+# najnowszej wersji hammer w hackeros-builder (internal/download/hammer.go).
+RELEASES_HTML="$WORK_DIR/releases.html"
+if ! curl -fsSL -A "HackerOS-install-kernel-hook/1.0" -o "$RELEASES_HTML" "$RELEASES_URL"; then
+    echo "BLAD: nie udalo sie pobrac $RELEASES_URL" >&2
+    exit 1
+fi
+
+LATEST_TAG=$(grep -oE "/${KERNEL_REPO//\//\\/}/releases/tag/v[0-9][^\"']*" "$RELEASES_HTML" \
+    | head -n1 \
+    | sed -E 's#.*/tag/##')
+
+if [ -z "$LATEST_TAG" ]; then
+    echo "BLAD: nie znaleziono zadnego tagu wydania na $RELEASES_URL" >&2
+    echo "Sprawdz czy repo $KERNEL_REPO ma co najmniej jedno wydanie." >&2
+    exit 1
+fi
+
+echo "Najnowsze wydanie: $LATEST_TAG"
+
+# Lista assetow konkretnego wydania -- endpoint "expanded_assets" (ten sam
+# ktory renderuje sekcje "Assets" po rozwinieciu na stronie wydania).
+ASSETS_URL="https://github.com/${KERNEL_REPO}/releases/expanded_assets/${LATEST_TAG}"
+ASSETS_HTML="$WORK_DIR/assets.html"
+if ! curl -fsSL -A "HackerOS-install-kernel-hook/1.0" -o "$ASSETS_HTML" "$ASSETS_URL"; then
+    echo "BLAD: nie udalo sie pobrac listy assetow z $ASSETS_URL" >&2
+    exit 1
+fi
+
+KERNEL_DEB_NAME=$(grep -oE "hackeros-kernel-cybersecurity_[^\"']+\.deb" "$ASSETS_HTML" | head -n1)
+HEADERS_DEB_NAME=$(grep -oE "hackeros-kernel-headers-cybersecurity_[^\"']+\.deb" "$ASSETS_HTML" | head -n1)
+
+if [ -z "$KERNEL_DEB_NAME" ] || [ -z "$HEADERS_DEB_NAME" ]; then
+    echo "BLAD: nie znaleziono oczekiwanych plikow .deb w wydaniu $LATEST_TAG" >&2
+    echo "Oczekiwano nazw pasujacych do:" >&2
+    echo "  hackeros-kernel-cybersecurity_<wersja>.deb" >&2
+    echo "  hackeros-kernel-headers-cybersecurity_<wersja>.deb" >&2
+    echo "Sprawdz assety wydania: https://github.com/${KERNEL_REPO}/releases/tag/${LATEST_TAG}" >&2
+    exit 1
+fi
+
+echo "Jadro:     $KERNEL_DEB_NAME"
+echo "Naglowki:  $HEADERS_DEB_NAME"
+
+KERNEL_DEB_URL="https://github.com/${KERNEL_REPO}/releases/download/${LATEST_TAG}/${KERNEL_DEB_NAME}"
+HEADERS_DEB_URL="https://github.com/${KERNEL_REPO}/releases/download/${LATEST_TAG}/${HEADERS_DEB_NAME}"
+
+KERNEL_DEB_PATH="$WORK_DIR/$KERNEL_DEB_NAME"
+HEADERS_DEB_PATH="$WORK_DIR/$HEADERS_DEB_NAME"
+
+echo "=== Pobieranie plikow .deb ==="
+curl -fL -o "$KERNEL_DEB_PATH" "$KERNEL_DEB_URL"
+curl -fL -o "$HEADERS_DEB_PATH" "$HEADERS_DEB_URL"
+
+echo "=== Instalacja jadra i naglowkow ==="
+# "apt-get install" z lokalnymi sciezkami .deb (zamiast samego "dpkg -i")
+# pozwala apt rozwiazac ewentualne zaleznosci (np. kmod, initramfs-tools)
+# z juz skonfigurowanych repo Debiana, zamiast zostawiac pakiet w stanie
+# "polamanym" gdy czegos brakuje.
+apt-get install -y "$KERNEL_DEB_PATH" "$HEADERS_DEB_PATH"
+
+echo "=== Sprzatanie pobranych plikow .deb ==="
+rm -f "$KERNEL_DEB_PATH" "$HEADERS_DEB_PATH"
+
+echo "=== Weryfikacja obecnosci jadra i initrd w /boot ==="
+if ! ls /boot/vmlinuz-* >/dev/null 2>&1; then
+    echo "BLAD: po instalacji $KERNEL_DEB_NAME nie znaleziono /boot/vmlinuz-*" >&2
+    echo "Pakiet zainstalowal sie bez bledu, ale nie zostawil obrazu jadra tam gdzie" >&2
+    echo "hackeros-builder go oczekuje -- sprawdz zawartosc pakietu $KERNEL_DEB_NAME." >&2
+    exit 1
+fi
+if ! ls /boot/initrd.img-* >/dev/null 2>&1; then
+    echo "BLAD: po instalacji nie znaleziono /boot/initrd.img-*" >&2
+    echo "Zwykle powstaje automatycznie przez initramfs-tools (trigger postinst" >&2
+    echo "pakietu jadra) -- sprawdz czy initramfs-tools jest zainstalowane i czy" >&2
+    echo "postinst pakietu $KERNEL_DEB_NAME poprawnie wywoluje update-initramfs." >&2
+    exit 1
+fi
+
+echo "=== Jadro HackerOS ($LATEST_TAG) zainstalowane poprawnie ==="
+ls -la /boot/vmlinuz-* /boot/initrd.img-*
