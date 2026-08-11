@@ -109,7 +109,43 @@ else
 end
 
 -- =====================================================================
--- KROK 3: BUDOWA KONTENERA OCI + ISO PRZEZ hackeros-builder (BEZ live-build)
+-- KROK 3: JADRO LINUKSA -- DOKLEJANE DYNAMICZNIE, NIE W config/ W REPO
+-- =====================================================================
+-- W przeciwienstwie do live-build (ktore ma wlasny, niezalezny od
+-- package-lists mechanizm --linux-packages, domyslnie "linux-image",
+-- automatycznie doinstalowujacy kernel), hackeros-builder instaluje
+-- TYLKO to co jest jawnie na liscie pakietow -- bez tego /boot zostaje
+-- puste i "build iso" pada na "nie znaleziono jadra w /boot".
+--
+-- Ta edycja (atomic) korzysta ze zwyklego jadra Debiana, wiec dopisujemy
+-- je tutaj, w tym skrypcie, w osobnym pliku
+-- config/package-lists/99-atomic-kernel.list.chroot -- hackeros-builder
+-- scala WSZYSTKIE pliki *.list.chroot w tym katalogu (patrz
+-- internal/liveparse/project.go w repo hackeros-builder), wiec nie trzeba
+-- w ogole dotykac istniejacych plikow. Dzieki temu "linux-image-amd64"
+-- NIE jest na stale w repo (w config/ ani helpers/atomic/) -- pojawia sie
+-- wylacznie w trakcie tego builda.
+--
+-- cybersecurity-default NIE dostaje tego pliku -- ta edycja ma zapewniac
+-- wlasne jadro (patrz helpers/cybersecurity-default/hooks/normal/install-kernel.hook.chroot).
+local kernelListPath = "config/package-lists/99-atomic-kernel.list.chroot"
+local kernelList = io.open(kernelListPath, "w")
+if not kernelList then
+    io.stderr:write("Blad: nie mozna utworzyc " .. kernelListPath .. "\n")
+    os.exit(1)
+end
+kernelList:write(
+    "# Plik wygenerowany dynamicznie przez build/build-hackeros-atomic --\n" ..
+    "# NIE edytuj recznie, NIE commituj zmian tutaj (ten plik nie powinien\n" ..
+    "# nawet istniec poza trwajacym buildem). Standardowe jadro Debiana dla\n" ..
+    "# edycji atomic, bo hackeros-builder (w przeciwienstwie do live-build)\n" ..
+    "# nie doinstalowuje jadra automatycznie.\n" ..
+    "linux-image-amd64\n"
+)
+kernelList:close()
+
+-- =====================================================================
+-- KROK 4: BUDOWA KONTENERA OCI + ISO PRZEZ hackeros-builder (BEZ live-build)
 -- =====================================================================
 local WORKDIR = "hackeros-build-work-atomic"
 local OUTPUT  = "HackerOS-atomic.iso"
@@ -119,19 +155,34 @@ if os.execute("command -v hackeros-builder >/dev/null 2>&1") ~= true then
         "Blad: polecenie 'hackeros-builder' nie jest dostepne w PATH.\n" ..
         "Ta edycja wymaga zainstalowania hackeros-builder w kroku CI PRZED " ..
         "uruchomieniem build.lua --atomic (analogicznie do kroku 'Instalacja " ..
-        "hackeros-builder' dla edycji cybersecurity-default). Zobacz .github/workflows/build.yml.\n"
+        "hackeros-builder' dla edycji cybersecurity-default). Zobacz .github/workflows/build-immutable.yml.\n"
+    )
+    os.exit(1)
+end
+
+-- HACKEROS_BUILD_TARGET pozwala wybrac co dokladnie hackeros-builder ma
+-- zbudowac: "all" (domyslnie, kontener OCI + ISO), "cloud" (tylko obraz
+-- OCI, bez ISO/Calamares) albo "iso" (tylko ISO -- zaklada ze obraz OCI
+-- juz istnieje w registry pod tagiem z config/config.hk). Ustawiane przez
+-- .github/workflows/build-immutable.yml (input "build_target"); lokalnie
+-- domyslnie "all" jesli zmienna nie jest ustawiona.
+local buildTarget = os.getenv("HACKEROS_BUILD_TARGET")
+if buildTarget == nil or buildTarget == "" then
+    buildTarget = "all"
+end
+if buildTarget ~= "all" and buildTarget ~= "cloud" and buildTarget ~= "iso" then
+    io.stderr:write(
+        "Blad: HACKEROS_BUILD_TARGET=" .. buildTarget .. " nie jest prawidlowe " ..
+        "(oczekiwano: all / cloud / iso).\n"
     )
     os.exit(1)
 end
 
 -- Wymaga roota (debootstrap/chroot/mount wewnatrz hackeros-builder).
--- "build all" buduje zarowno obraz kontenerowy (OCI, z wstrzyknietym
--- hammer + /etc/hammer/oci.hk), jak i ISO (z Calamares, bez apt/apt-get
--- na finalnie zainstalowanym dysku) z tego samego config/.
 sh(
     "sudo hackeros-builder " ..
     "--project " .. quote(".") .. " " ..
     "--workdir " .. quote(WORKDIR) .. " " ..
     "--output " .. quote(OUTPUT) .. " " ..
-    "build all"
+    "build " .. buildTarget
 )
