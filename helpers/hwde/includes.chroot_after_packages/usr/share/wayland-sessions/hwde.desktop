@@ -1,7 +1,0 @@
-[Desktop Entry]
-Name=HWDE
-Comment=HackerOS Wayland Desktop Environment
-Exec=/usr/bin/starthwde
-Type=Application
-DesktopNames=HWDE
-Keywords=hackeros;wayland;desktop;
