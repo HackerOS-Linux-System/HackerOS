@@ -13,11 +13,12 @@ on:
     inputs:
       hackeros_builder_source:
         description: >-
-          Skad wziac narzedzie hackeros-builder. "source" = git clone + go mod
-          vendor + make (zawsze aktualne, dluzej trwa). "latest-release" /
-          "specific-release" = pobranie gotowej binarki z GitHub Releases repo
-          HackerOS-Builder (szybciej, wymaga zeby to repo faktycznie
-          publikowalo asset "hackeros-builder" w wydaniu).
+          Skad wziac narzedzie hackeros-builder. "source" = git clone + go build
+          (czysty Go, bez make/Makefile -- repo HackerOS-Builder celowo go nie ma;
+          zawsze aktualne, dluzej trwa). "latest-release" / "specific-release" =
+          pobranie gotowej binarki z GitHub Releases repo HackerOS-Builder
+          (szybciej, wymaga zeby to repo faktycznie publikowalo asset
+          "hackeros-builder" w wydaniu).
         required: true
         default: "source"
         type: choice
@@ -69,14 +70,17 @@ jobs:
 
       - name: Instalacja podstawowych narzedzi
         run: |
+          # UWAGA: nie instalujemy tu jawnie "make" ani "gcc" -- oba sa i tak
+          # sciagane tranzytywnie przez "build-essential" (Depends: gcc, make,
+          # ...), potrzebne WYLACZNIE do zbudowania Lua ze zrodel kilka krokow
+          # nizej. Repo HackerOS-Builder CELOWO nie ma Makefile'a -- budujemy
+          # je czystym "go build", bez "make".
           sudo apt-get install -y --no-install-recommends \
             tar \
             git \
             curl \
             ca-certificates \
             build-essential \
-            make \
-            gcc \
             libreadline-dev
 
       - name: Instalacja Pythona 3.13 (deadsnakes PPA)
@@ -127,12 +131,15 @@ jobs:
           set -e
           case "${{ inputs.hackeros_builder_source || 'source' }}" in
             source)
+              # git clone + go build -- BEZ "make" i BEZ "go mod vendor": repo
+              # HackerOS-Builder celowo nie ma Makefile'a, wiec budujemy
+              # WYLACZNIE golangiem. "go mod tidy" uzupelnia/weryfikuje go.sum
+              # (na wypadek gdyby w danym commicie byl niekompletny).
               rm -rf /tmp/hackeros-builder-src
               git clone --depth 1 "https://github.com/${HACKEROS_BUILDER_REPO}.git" /tmp/hackeros-builder-src
               cd /tmp/hackeros-builder-src
               go mod tidy
-              go mod vendor
-              make
+              go build -trimpath -ldflags="-s -w" -o hackeros-builder .
               sudo install -Dm755 hackeros-builder /usr/local/bin/hackeros-builder
               cd -
               ;;
