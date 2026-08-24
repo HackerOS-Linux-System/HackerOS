@@ -165,8 +165,18 @@ local VER_GAMES  = manifest_version("HackerOS Games")
 -- Kategoria: gaming-cli (edycja --gaming)
 local VER_GAMING = manifest_version("gaming-cli")
 
--- Kategoria: hammer (edycja --atomic)
+-- Kategoria: hammer (edycja --atomic, oraz --container -- patrz
+-- step_container_pre_build)
 local VER_HAMMER = manifest_version("hammer")
+
+-- Kategoria: binarki DODATKOWE, WYLACZNIE dla edycji --container (patrz
+-- step_container_pre_build) -- kontener HackerOS-Builder ma miec
+-- narzedzia deweloperskie ekosystemu HackerOS gotowe od razu w /usr/bin/,
+-- czego zwykla instalacja (official/atomic/...) nie robi.
+local VER_HACKERSCRIPT     = manifest_version("HackerScript")
+local VER_HSHARP           = manifest_version("H#")
+local VER_BYTES            = manifest_version("Bytes")
+local VER_HACKEROS_BUILDER = manifest_version("HackerOS-Builder")
 
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
@@ -236,10 +246,6 @@ local EDITIONS = {
         build_script = "build/build-hackeros-blue",
         placeholder  = false,
     },
-    hwde = {
-        build_script = "build/build-hackeros-hwde",
-        placeholder  = false,
-    },
     hydra = {
         build_script = "build/build-hackeros-hydra",
         placeholder  = false,
@@ -282,6 +288,11 @@ local EDITIONS = {
         build_script = "build/build-hackeros-cybersecurity-default",
         placeholder  = false,
     },
+    container = {
+        build_script = "build/build-hackeros-container",
+        placeholder  = false,
+        pre_build    = "container",
+    },
 }
 
 local function print_help()
@@ -294,7 +305,6 @@ Dostępne flagi edycji (można podać tylko jedną naraz):
   --gaming                 Edycja gamingowa (helpers/gaming, gaming-cli,
                             build/build-hackeros-gaming, bez HackerOS-Steam)
   --blue                    Edycja Blue (build/build-hackeros-blue)
-  --hwde                    Edycja HWDE (build/build-hackeros-hwde)
   --hydra                    Edycja Hydra (helpers/hydra, build/build-hackeros-hydra)
   --lts                      Edycja LTS (helpers/lts, build/build-hackeros-lts)
   --gnome                    Edycja GNOME (helpers/gnome)
@@ -306,6 +316,9 @@ Dostępne flagi edycji (można podać tylko jedną naraz):
                               build/build-hackeros-cybersecurity)
   --cybersecurity-default    Edycja Cybersecurity Default (branch cybersecurity,
                               build/build-hackeros-cybersecurity-default)
+  --container                 Kontener roboczy HackerOS-Builder (helpers/container,
+                              build/build-hackeros-container, budowany przez
+                              "hackeros-builder build container" zamiast live-build/ISO)
   --help                     Wyświetla tę pomoc
 
 ]])
@@ -831,14 +844,164 @@ local function step_atomic_pre_build()
     copy_helper_dir("helpers/atomic", false)
 end
 
+-- =====================================================================
+-- --container: KONTENER ROBOCZY HackerOS-Builder
+-- =====================================================================
+-- W odróżnieniu od --atomic (obraz OCI atomowy + ISO instalacyjne),
+-- --container przygotowuje strukturę config/ dla "hackeros-builder build
+-- container" -- zwykły kontener roboczy (podman/docker), bez hammer, bez
+-- ISO, bez usuwania apt/apt-get z rootfs (patrz ProjectTypeContainer w
+-- repo HackerOS-Builder, internal/config/config.go). main() już wykonuje
+-- dla TEJ edycji dokładnie te same kroki bazowe co dla official (klon
+-- HackerOS-Updates, HackerOS-Apps, narzędzia /usr/bin, gry, Hacker-Lang,
+-- venv Pythona, ...) -- ta funkcja dokłada WYŁĄCZNIE to, co jest
+-- specyficzne dla kontenera.
+
+-- Ścieżka pliku źródłowego z listą pakietów kontenera -- ZWYKŁY, płaski
+-- plik (jedna nazwa pakietu na linię, komentarze "#" dozwolone), NIE w
+-- formacie *.list.chroot. Dostarczany osobno (poza tym repo w chwili
+-- pisania tego kodu) -- patrz KROK "lista pakietów" niżej, który go
+-- konwertuje do formatu jakiego oczekuje hackeros-builder.
+local CONTAINER_PACKAGE_LIST_SRC = "helpers/container/package-list"
+local PACKAGE_LISTS_DIR          = "config/package-lists"
+local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chroot"
+
+-- Usuwa config/package-lists/live.list.chroot ORAZ cały katalog
+-- includes.chroot_after_packages/etc/calamares.
+--
+-- Dlaczego CAŁY live.list.chroot, nie tylko wpisy calamares (jak robi to
+-- build/build-hackeros-atomic dla edycji --atomic): live.list.chroot to
+-- lista pakietów PEŁNEGO środowiska graficznego (plasma-desktop, sddm,
+-- dolphin, kate, ...) przygotowana pod live-build/atomic -- kompletnie
+-- nieodpowiednia dla zwykłego, headless kontenera roboczego. Jedynym
+-- źródłem prawdy o pakietach kontenera ma być
+-- CONTAINER_PACKAGE_LIST_DST (skopiowany z helpers/container/package-list
+-- w step_container_package_list) -- hackeros-builder scala WSZYSTKIE
+-- pliki *.list.chroot w config/package-lists/ bezwarunkowo (patrz
+-- internal/liveparse/project.go w repo hackeros-builder), więc
+-- live.list.chroot musi zniknąć z tego katalogu PRZED wywołaniem
+-- hackeros-buildera, inaczej te ~50 pakietów środowiska graficznego
+-- trafiłoby do kontenera obok właściwej listy.
+--
+-- Usunięcie samego pliku (repo jest i tak świeżym checkoutem w CI, więc
+-- nic globalnie nie psuje) jest prostsze i solidniejsze niż filtrowanie
+-- linii, i przy okazji całkowicie eliminuje potrzebę osobnego wykluczania
+-- "calamares"/"calamares-settings-debian" z tej listy -- nie ma jej już
+-- wcale.
+--
+-- Katalog includes.chroot_after_packages/etc/calamares usuwamy mimo to,
+-- jako dodatkowe zabezpieczenie (np. gdyby package-list kontenera
+-- kiedyś przypadkiem dodał "calamares") -- ten katalog JEST kopiowany do
+-- rootfs kontenera w całości przez hackeros-builder (krok "copy
+-- includes.chroot_after_packages" w internal/rootfs/builder.go, ten sam
+-- mechanizm dla KAŻDEGO build targetu -- cloud/iso/container), więc
+-- usunięcie etc/calamares TUTAJ, PRZED wywołaniem hackeros-buildera, jest
+-- równoznaczne z "skopiuj etc/ do /etc poza katalogiem calamares".
+local function remove_desktop_packages_and_calamares_for_container()
+    local liveListPath = PACKAGE_LISTS_DIR .. "/live.list.chroot"
+    if exists(liveListPath) then
+        sh("rm -f " .. quote(liveListPath))
+        io.write("Usunięto (tylko dla --container): " .. liveListPath .. "\n")
+    end
+
+    local calamaresConfigDir = "config/includes.chroot_after_packages/etc/calamares"
+    if exists(calamaresConfigDir) then
+        sh("rm -rf " .. quote(calamaresConfigDir))
+        io.write("Usunięto katalog: " .. calamaresConfigDir .. "\n")
+    end
+end
+
+-- Konwertuje CONTAINER_PACKAGE_LIST_SRC (płaski plik) na
+-- CONTAINER_PACKAGE_LIST_DST (*.list.chroot) -- hackeros-builder scala
+-- WSZYSTKIE pliki *.list.chroot w config/package-lists/ (patrz
+-- internal/liveparse/project.go w repo hackeros-builder), więc wystarczy
+-- skopiować zawartość pod nazwą kończącą się na ".list.chroot"; nie trzeba
+-- nic parsować ani scalać ręcznie w Lua.
+local function step_container_package_list()
+    heading("Konwersja " .. CONTAINER_PACKAGE_LIST_SRC .. " -> " .. CONTAINER_PACKAGE_LIST_DST)
+
+    if not exists(CONTAINER_PACKAGE_LIST_SRC) then
+        io.stderr:write(
+            "Błąd: nie znaleziono " .. CONTAINER_PACKAGE_LIST_SRC .. " -- edycja --container " ..
+            "wymaga tego pliku (lista pakietów apt do zainstalowania w kontenerze, " ..
+            "jedna nazwa na linię, linie zaczynające się od '#' są ignorowane).\n"
+        )
+        os.exit(1)
+    end
+
+    mkdirp(PACKAGE_LISTS_DIR)
+    sh("cp " .. quote(CONTAINER_PACKAGE_LIST_SRC) .. " " .. quote(CONTAINER_PACKAGE_LIST_DST))
+end
+
+-- Pobiera do TARGET_BIN (config/includes.chroot_after_packages/usr/bin)
+-- binarki DODATKOWE, instalowane WYŁĄCZNIE w kontenerze -- NIE trafiają do
+-- żadnej innej edycji. Ten katalog jest kopiowany przez hackeros-builder
+-- 1:1 do rootfs/usr/ (patrz komentarz przy remove_calamares_from_config
+-- wyżej) -- stąd "kopiowanie do /usr/" opisane w wymaganiach dzieje się
+-- automatycznie, bez dodatkowego kodu tutaj.
+local function step_container_extra_tools()
+    heading("Tryb --container: pobieranie dodatkowych narzędzi deweloperskich do /usr/bin")
+
+    mkdirp(TARGET_BIN)
+
+    -- { nazwa binarki, organizacja/repo GitHub, wersja }
+    -- UWAGA: Bytes żyje pod ORGANIZACJĄ "Bytes-Repository", NIE
+    -- "HackerOS-Linux-System" jak reszta -- dlatego pełna ścieżka
+    -- org/repo jest podawana jawnie dla każdego narzędzia zamiast
+    -- zakładać wspólny prefiks (tak jak robią to inne pętle w tym pliku).
+    local extra_tools = {
+        -- UWAGA co do nazwy binarki: repozytorium/wydania HackerScript nie
+        -- były dostępne w chwili pisania tego skryptu, więc nazwa pliku
+        -- wydania została przyjęta analogicznie do reszty narzędzi
+        -- ekosystemu (nazwa binarki = nazwa repo, małymi literami, bez
+        -- myślników) -- jeśli faktyczne wydanie publikuje binarkę pod
+        -- inną nazwą, zmień WYŁĄCZNIE pole "name" poniżej.
+        { name = "hackerscript",     org_repo = "HackerOS-Linux-System/HackerScript",     ver = VER_HACKERSCRIPT },
+        { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = VER_HSHARP },
+        { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = VER_BYTES },
+        { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = VER_HACKEROS_BUILDER },
+        -- hammer jest też pobierany dla --atomic (step_atomic_pre_build),
+        -- ale to ODDZIELNE wywołanie/miejsce w drzewie -- kontener ma
+        -- dostać własną kopię w TYM SAMYM miejscu co pozostałe narzędzia.
+        { name = "hammer",           org_repo = "HackerOS-Linux-System/hammer",            ver = VER_HAMMER },
+    }
+
+    for _, tool in ipairs(extra_tools) do
+        local url  = "https://github.com/" .. tool.org_repo ..
+                     "/releases/download/" .. tool.ver .. "/" .. tool.name
+        local dest = TARGET_BIN .. "/" .. tool.name
+        download(url, dest)
+        chmodx(dest)
+    end
+end
+
+-- --container: lista pakietów, usunięcie Calamares, dodatkowe binarki,
+-- helpers/container -> config/. Wszystkie inne narzędzia (HackerOS-Apps,
+-- /usr/bin, gry, Hacker-Lang, venv Pythona, ...) są już pobrane przez
+-- main() PRZED wywołaniem tej funkcji -- dokładnie te same kroki co dla
+-- official, więc nie są tu powtarzane.
+local function step_container_pre_build()
+    heading("Tryb --container: dodatkowe operacje")
+
+    step_container_package_list()
+    remove_desktop_packages_and_calamares_for_container()
+    step_container_extra_tools()
+
+    -- helpers/container -> config/ (np. config.hk z [project] -> type =>
+    -- container; patrz plik dostarczony razem z tą zmianą). Analogicznie
+    -- do copy_helper_dir("helpers/atomic", false).
+    copy_helper_dir("helpers/container", false)
+end
+
 -- Tabela dowiązująca klucz pre_build z EDITIONS do konkretnej funkcji.
 local EDITION_PRE_BUILD = {
-    hydra  = step_hydra_pre_build,
-    lts    = step_lts_pre_build,
-    gnome  = step_gnome_pre_build,
-    xfce   = step_xfce_pre_build,
-    nvidia = step_nvidia_pre_build,
-    atomic = step_atomic_pre_build,
+    hydra     = step_hydra_pre_build,
+    lts       = step_lts_pre_build,
+    gnome     = step_gnome_pre_build,
+    xfce      = step_xfce_pre_build,
+    nvidia    = step_nvidia_pre_build,
+    atomic    = step_atomic_pre_build,
+    container = step_container_pre_build,
 }
 
 -- =====================================================================
@@ -951,7 +1114,7 @@ end
 -- =====================================================================
 
 -- Wybiera skrypt budujący zależnie od edycji: dla edycji w pełni
--- obsługiwanych (np. gaming, blue, hwde, hydra, lts, xfce) używa
+-- obsługiwanych (np. gaming, blue, hydra, lts, xfce) używa
 -- build_script z EDITIONS; dla edycji placeholder (jeszcze nieobsłużonych)
 -- i dla builda domyślnego używa build/build-hackeros.
 local function step_run_build(edition)
