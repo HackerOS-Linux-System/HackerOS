@@ -1,0 +1,14 @@
+[project]
+-> name => hackeros-container
+-> tag => stable
+-> type => container
+
+[account]
+-> type => organisation
+-> name => HackerOS-Linux-System
+
+[auth]
+-> token =>
+
+[release]
+-> name => forky
