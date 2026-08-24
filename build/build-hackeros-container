@@ -1,0 +1,123 @@
+#!/usr/bin/env lua5.5
+
+-- =====================================================================
+-- build-hackeros-container
+--
+-- Buduje ZWYKŁY kontener roboczy (podman/docker), NIE obraz atomowy/ISO --
+-- odpowiednik build-hackeros-atomic, ale dla "hackeros-builder build
+-- container" zamiast "build <cloud|iso|all>". Bez hammer, bez Calamares,
+-- bez usuwania apt/apt-get z rootfs (build container zostawia apt tak,
+-- jak w każdym zwykłym obrazie bazowym Debiana -- patrz
+-- ProjectTypeContainer w repo HackerOS-Builder, internal/config/config.go).
+--
+-- Wszystkie operacje na plikach (lista pakietów, usunięcie
+-- live.list.chroot/etc/calamares, pobranie dodatkowych binarek,
+-- helpers/container -> config/) są już wykonane przez build.lua
+-- (step_container_pre_build) PRZED uruchomieniem tego skryptu -- ten plik
+-- odpowiada WYŁĄCZNIE za samo wywołanie hackeros-buildera.
+-- =====================================================================
+
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd, allow_fail)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok == true or ok == 0 then
+        return true
+    end
+    if allow_fail then
+        io.stderr:write("Ostrzezenie: polecenie nie powiodlo sie (kontynuuje): " .. cmd .. "\n")
+        return false
+    end
+    io.stderr:write("Blad: polecenie nie powiodlo sie: " .. cmd .. "\n")
+    os.exit(1)
+end
+
+local function exists(path)
+    return os.execute("test -e " .. quote(path)) == true
+end
+
+-- =====================================================================
+-- KROK 1: ZABEZPIECZENIE NA WYPADEK "forky" (Debian testing)
+-- =====================================================================
+-- helpers/container/config.hk domyślnie ustawia [release] -> name =>
+-- trixie (Debian stable, znany debootstrapowi) właśnie po to, by uniknąć
+-- tego problemu -- ten symlink jest tu mimo to, na wypadek gdyby ktoś w
+-- przyszłości zmienił release na "forky" (patrz identyczny krok w
+-- build-hackeros-atomic / build-hackeros-cybersecurity-default).
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky", true)
+
+-- =====================================================================
+-- KROK 2: TOKEN DO [auth] -> token W config/config.hk (OPCJONALNY)
+-- =====================================================================
+-- W odróżnieniu od --atomic, "hackeros-builder build container" NIE
+-- wymaga konta w registry -- push jest wykonywany TYLKO jeśli
+-- [account]/[auth] są faktycznie wypełnione (patrz ContainerOptions w
+-- internal/buildflow/container.go, repo HackerOS-Builder); bez tokena
+-- kontener i tak powstaje jako lokalne archiwum .tar. Token (jeśli
+-- podany) pochodzi z sekretu GitHub Actions "CONTAINER_TOKEN" -- pusty
+-- string jest w pełni poprawną wartością (config.hk wymaga OBECNOŚCI
+-- klucza "-> token =>", nie tego, żeby miał niepustą wartość).
+local CONFIG_HK = "config/config.hk"
+local token = os.getenv("CONTAINER_TOKEN") or ""
+
+if exists(CONFIG_HK) then
+    local f = io.open(CONFIG_HK, "r")
+    local content = f:read("*a")
+    f:close()
+
+    local escaped_token = token:gsub("%%", "%%%%")
+    local new_content, n = content:gsub(
+        "(%-%>%s*token%s*=>)[^\n]*",
+        "%1 " .. escaped_token
+    )
+    if n == 0 then
+        io.stderr:write("Ostrzezenie: nie znaleziono linii '-> token =>' w " .. CONFIG_HK .. " - dopisuje sekcje [auth].\n")
+        new_content = content .. "\n[auth]\n-> token => " .. token .. "\n"
+    end
+
+    local out = io.open(CONFIG_HK, "w")
+    out:write(new_content)
+    out:close()
+else
+    io.stderr:write(
+        "Blad: nie znaleziono " .. CONFIG_HK .. " - oczekiwano ze build.lua " ..
+        "(step_container_pre_build -> copy_helper_dir(\"helpers/container\", false)) " ..
+        "juz go tam skopiowal z helpers/container/config.hk. Przerywam.\n"
+    )
+    os.exit(1)
+end
+
+-- =====================================================================
+-- KROK 3: BUDOWA KONTENERA PRZEZ hackeros-builder (BEZ live-build, BEZ ISO)
+-- =====================================================================
+local WORKDIR = "hackeros-build-work-container"
+
+if os.execute("command -v hackeros-builder >/dev/null 2>&1") ~= true then
+    io.stderr:write(
+        "Blad: polecenie 'hackeros-builder' nie jest dostepne w PATH.\n" ..
+        "Ta edycja wymaga zainstalowania hackeros-builder w kroku CI PRZED " ..
+        "uruchomieniem build.lua --container. Zobacz .github/workflows/build-container.yml.\n"
+    )
+    os.exit(1)
+end
+
+-- --local-only: gdy CONTAINER_TOKEN nie jest ustawiony, wymuszamy jawnie
+-- brak prob pushu do registry (i tak nastapilby automatycznie z pustym
+-- tokenem, ale jawna flaga daje czytelniejszy log i szybsze niepowodzenie
+-- gdyby logika hackeros-buildera kiedys sie zmienila).
+local localOnlyFlag = ""
+if token == "" then
+    io.write("CONTAINER_TOKEN nie ustawiony -- kontener zostanie zbudowany WYLACZNIE lokalnie (--local-only).\n")
+    localOnlyFlag = "--local-only "
+end
+
+-- Wymaga roota (debootstrap/chroot/mount wewnatrz hackeros-builder).
+sh(
+    "sudo hackeros-builder " ..
+    "--project " .. quote(".") .. " " ..
+    "--workdir " .. quote(WORKDIR) .. " " ..
+    "build container " .. localOnlyFlag
+)
