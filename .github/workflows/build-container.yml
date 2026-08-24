@@ -1,1 +1,233 @@
+name: Build HackerOS (Container)
+# Odpowiednik build-immuntable.yml, ale zamiast obrazu OCI atomowego +
+# ISO (edycje atomic/cybersecurity-default) buduje ZWYKLY kontener
+# roboczy HackerOS-Builder -- "hackeros-builder build container" wywolane
+# przez build.lua --container (patrz build/build-hackeros-container).
+# Bez hammer, bez Calamares/ISO, bez debootstrap "forky" (release =
+# trixie w helpers/container/config.hk) -- ta sama para narzedzi
+# (debootstrap/chroot/sandbox) co edycje immutable, ale mniej ich
+# potrzeba (brak squashfs-tools/xorriso/grub-* -- container nie tworzy
+# ISO w zadnym momencie).
+on:
+  workflow_dispatch:
+    inputs:
+      hackeros_builder_source:
+        description: >-
+          Skad wziac narzedzie hackeros-builder. "source" = git clone + go mod
+          vendor + make (zawsze aktualne, dluzej trwa). "latest-release" /
+          "specific-release" = pobranie gotowej binarki z GitHub Releases repo
+          HackerOS-Builder (szybciej, wymaga zeby to repo faktycznie
+          publikowalo asset "hackeros-builder" w wydaniu).
+        required: true
+        default: "source"
+        type: choice
+        options:
+          - source
+          - latest-release
+          - specific-release
+      hackeros_builder_version:
+        description: >-
+          Tag wydania hackeros-builder do pobrania (np. "v0.10.0") -- UZYWANE
+          WYLACZNIE gdy powyzej wybrano "specific-release". Ignorowane dla
+          "source" i "latest-release".
+        required: false
+        default: ""
+        type: string
+  push:
+    branches: [ "official" ]
+    paths:
+      - "build.lua"
+      - "build/build-hackeros-container"
+      - "helpers/container/**"
+      - "packages/manifest.hk"
+      - "config/includes.chroot_after_packages/**"
+      - ".github/workflows/build-container.yml"
+env:
+  LUA_VERSION: "5.5.0"
+  HACKEROS_BUILDER_REPO: "HackerOS-Linux-System/HackerOS-Builder"
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout repozytorium
+        uses: actions/checkout@v4
 
+      - name: Odczyt wersji z config.hk
+        id: version
+        run: |
+          VERSION=$(awk -F'=>' '/version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $NF); print $NF }' config.hk | head -n1)
+          if [ -z "$VERSION" ]; then
+            echo "Nie udalo sie odczytac wersji z ./config.hk (oczekiwany format: 'version => X.Y' pod [metadata])" >&2
+            exit 1
+          fi
+          echo "Wersja odczytana z config.hk: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Aktualizacja listy pakietow
+        run: sudo apt-get update
+
+      - name: Instalacja podstawowych narzedzi
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            tar \
+            git \
+            curl \
+            ca-certificates \
+            build-essential \
+            make \
+            gcc \
+            libreadline-dev
+
+      - name: Instalacja Pythona 3.13 (deadsnakes PPA)
+        run: |
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.13 python3.13-venv python3.13-dev
+
+      - name: Budowa i instalacja Lua ${{ env.LUA_VERSION }} ze zrodel
+        run: |
+          curl -fL -o "lua-${LUA_VERSION}.tar.gz" \
+            "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz"
+          tar -xzf "lua-${LUA_VERSION}.tar.gz"
+          cd "lua-${LUA_VERSION}"
+          make linux -j"$(nproc)"
+          sudo make install
+          cd ..
+          # Domyslny "make install" Lua instaluje binarki jako `lua`/`luac`
+          # (bez numeru wersji), a nasz workflow oraz build.lua wywoluja
+          # jawnie `lua5.5`. Tworzymy symlinki, zeby `lua5.5`/`luac5.5`
+          # wskazywaly na swiezo zbudowana instalacje.
+          sudo ln -sf "$(command -v lua)" /usr/local/bin/lua5.5
+          sudo ln -sf "$(command -v luac)" /usr/local/bin/luac5.5
+          hash -r
+          lua5.5 -v
+
+      - name: Instalacja narzedzi hackeros-builder (debootstrap)
+        run: |
+          # Kontener roboczy NIGDY nie tworzy ISO (brak grub-mkrescue) ani
+          # squashfs (brak squashfs-tools) -- "build container" konczy sie
+          # na spakowaniu rootfs jako warstwy OCI/archiwum .tar (patrz
+          # internal/ociimage/local.go w repo HackerOS-Builder). Zestaw
+          # zaleznosci jest wiec wezszy niz dla build-immuntable.yml.
+          sudo apt-get install -y --no-install-recommends \
+            debootstrap \
+            debian-archive-keyring
+
+      - name: Instalacja Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Pozyskanie hackeros-builder (zrodlo = ${{ inputs.hackeros_builder_source }})
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          case "${{ inputs.hackeros_builder_source || 'source' }}" in
+            source)
+              rm -rf /tmp/hackeros-builder-src
+              git clone --depth 1 "https://github.com/${HACKEROS_BUILDER_REPO}.git" /tmp/hackeros-builder-src
+              cd /tmp/hackeros-builder-src
+              go mod tidy
+              go mod vendor
+              make
+              sudo install -Dm755 hackeros-builder /usr/local/bin/hackeros-builder
+              cd -
+              ;;
+
+            latest-release)
+              echo "Pobieranie najnowszego wydania hackeros-builder z GitHub Releases..."
+              URL="https://github.com/${HACKEROS_BUILDER_REPO}/releases/latest/download/hackeros-builder"
+              if ! curl -fL -o /tmp/hackeros-builder "$URL"; then
+                echo "Blad: nie udalo sie pobrac $URL" >&2
+                echo "Upewnij sie, ze repo ${HACKEROS_BUILDER_REPO} publikuje w wydaniach" >&2
+                echo "(GitHub Releases) asset o nazwie dokladnie 'hackeros-builder'" >&2
+                echo "(statyczna binarka linux/amd64), albo uzyj hackeros_builder_source=source." >&2
+                exit 1
+              fi
+              sudo install -Dm755 /tmp/hackeros-builder /usr/local/bin/hackeros-builder
+              ;;
+
+            specific-release)
+              VERSION_TAG="${{ inputs.hackeros_builder_version }}"
+              if [ -z "$VERSION_TAG" ]; then
+                echo "Blad: hackeros_builder_source=specific-release wymaga podania" >&2
+                echo "'hackeros_builder_version' (np. v0.10.0) w parametrach uruchomienia." >&2
+                exit 1
+              fi
+              echo "Pobieranie hackeros-builder $VERSION_TAG z GitHub Releases..."
+              URL="https://github.com/${HACKEROS_BUILDER_REPO}/releases/download/${VERSION_TAG}/hackeros-builder"
+              if ! curl -fL -o /tmp/hackeros-builder "$URL"; then
+                echo "Blad: nie udalo sie pobrac $URL" >&2
+                echo "Sprawdz, czy tag '$VERSION_TAG' istnieje i czy to wydanie" >&2
+                echo "publikuje asset o nazwie dokladnie 'hackeros-builder'." >&2
+                exit 1
+              fi
+              sudo install -Dm755 /tmp/hackeros-builder /usr/local/bin/hackeros-builder
+              ;;
+
+            *)
+              echo "Blad: nieznana wartosc hackeros_builder_source: '${{ inputs.hackeros_builder_source }}'" >&2
+              exit 1
+              ;;
+          esac
+          hackeros-builder --version || true
+
+      - name: Uruchomienie build.lua --container
+        env:
+          # Sekret GitHub Actions o nazwie "CONTAINER_TOKEN" (token classic
+          # z uprawnieniami do org HackerOS-Linux-System) -- OPCJONALNY.
+          # Uzyty wylacznie przez build/build-hackeros-container do
+          # wypelnienia [auth] -> token w config/config.hk; gdy nieustawiony,
+          # kontener powstaje WYLACZNIE lokalnie (--local-only), bez proby
+          # pushu do registry. Patrz build/build-hackeros-container.
+          CONTAINER_TOKEN: ${{ secrets.CONTAINER_TOKEN }}
+        run: |
+          chmod +x build.lua
+          lua5.5 build.lua --container
+
+      - name: Wyszukanie zbudowanego archiwum kontenera (.tar)
+        id: find_tar
+        run: |
+          echo "tar_found=$(find . -maxdepth 4 -iname '*.tar' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Zmiana nazwy archiwum kontenera
+        id: rename_tar
+        if: steps.find_tar.outputs.tar_found != ''
+        run: |
+          SRC="${{ steps.find_tar.outputs.tar_found }}"
+          DEST="HackerOS-Builder-Container-V${{ steps.version.outputs.version }}.tar"
+          mv -- "$SRC" "$DEST"
+          echo "Zmieniono nazwe: $SRC -> $DEST"
+          echo "tar_path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Wygenerowanie sum kontrolnych archiwum (SHA256 / SHA512)
+        id: checksums
+        if: steps.find_tar.outputs.tar_found != ''
+        run: |
+          TAR="${{ steps.rename_tar.outputs.tar_path }}"
+          sha256sum "$TAR" > "${TAR}.sha256sum"
+          sha512sum "$TAR" > "${TAR}.sha512sum"
+          echo "--- ${TAR}.sha256sum ---"
+          cat "${TAR}.sha256sum"
+          echo "--- ${TAR}.sha512sum ---"
+          cat "${TAR}.sha512sum"
+
+      - name: Wgranie archiwum kontenera jako artefaktu builda
+        if: steps.find_tar.outputs.tar_found != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: HackerOS-Builder-Container-V${{ steps.version.outputs.version }}
+          path: |
+            ${{ steps.rename_tar.outputs.tar_path }}
+            ${{ steps.rename_tar.outputs.tar_path }}.sha256sum
+            ${{ steps.rename_tar.outputs.tar_path }}.sha512sum
+          if-no-files-found: error
+
+      - name: Informacja o sposobie wczytania kontenera
+        if: steps.find_tar.outputs.tar_found != ''
+        run: |
+          echo "Wczytaj lokalnie:  podman load -i ${{ steps.rename_tar.outputs.tar_path }}"
+          echo "               albo docker load -i ${{ steps.rename_tar.outputs.tar_path }}"
