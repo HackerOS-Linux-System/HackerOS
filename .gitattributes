@@ -66,9 +66,9 @@ build-hackeros-blue linguist-detectable=true
 build-hackeros-blue linguist-documentation=false
 build-hackeros-blue linguist-language=LUA
 
-build-hackeros-hwde linguist-detectable=true
-build-hackeros-hwde linguist-documentation=false
-build-hackeros-hwde linguist-language=LUA
+build-hackeros-container linguist-detectable=true
+build-hackeros-container linguist-documentation=false
+build-hackeros-container linguist-language=LUA
 
 build-hackeros-nvidia linguist-detectable=true
 build-hackeros-nvidia linguist-documentation=false
