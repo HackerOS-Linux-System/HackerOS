@@ -14,7 +14,6 @@ on:
           - gaming
           - cybersecurity
           - blue
-          - hwde
           - hydra
           - lts
           - gnome
@@ -37,14 +36,14 @@ jobs:
         id: set-matrix
         run: |
           # Edycje "official"
-          OFFICIAL_EDITIONS='["official","gaming","blue","hwde","hydra","lts","gnome","xfce","nvidia"]'
+          OFFICIAL_EDITIONS='["official","gaming","blue","hydra","lts","gnome","xfce","nvidia"]'
           # Edycje "cybersecurity" - od teraz budowane na TYM SAMYM branchu co
           # reszta (helpers/cybersecurity żyje w repo obok pozostałych
           # helpers/*, nie na osobnym branchu). "cybersecurity-default" NIE
           # jest tu wliczone -- ta edycja (razem z "atomic") buduje się przez
           # osobny workflow: build-immutable.yml (nie używa live-build).
           CYBERSECURITY_EDITIONS='["cybersecurity"]'
-          ALL_EDITIONS='["official","gaming","cybersecurity","blue","hwde","hydra","lts","gnome","xfce","nvidia"]'
+          ALL_EDITIONS='["official","gaming","cybersecurity","blue","hydra","lts","gnome","xfce","nvidia"]'
           # Opcja "monthly" (uruchamiana ręcznie raz w miesiącu) - buduje tylko
           # official, cybersecurity i nvidia.
           MONTHLY_EDITIONS='["official","cybersecurity","nvidia"]'
