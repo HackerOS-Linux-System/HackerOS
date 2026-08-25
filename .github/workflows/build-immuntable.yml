@@ -50,6 +50,13 @@ on:
 env:
   LUA_VERSION: "5.5.0"
   HACKEROS_BUILDER_REPO: "HackerOS-Linux-System/HackerOS-Builder"
+# Patrz identyczny komentarz w .github/workflows/build-container.yml --
+# workflow_dispatch tez moze zostac odpalony wielokrotnie z rzedu (np.
+# pomylkowo/przez dwie osoby na raz); bez tego kolejne runy staja w
+# "Queued" jeden za drugim zamiast anulowac nieaktualny.
+concurrency:
+  group: build-immuntable-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-24.04
