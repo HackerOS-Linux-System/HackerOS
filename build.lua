@@ -112,7 +112,15 @@ local function parse_hk_tools_manifest(path)
             in_tools_section = (section == "tools")
         elseif in_tools_section then
             local qname, qver = line:match('^%s*%-%>%s*"([^"]+)"%s*=>%s*(%S+)%s*$')
-            local bname, bver = line:match('^%s*%-%>%s*([%w_%-]+)%s*=>%s*(%S+)%s*$')
+            -- UWAGA: klucz gołego (bez cudzysłowu) wpisu to PO PROSTU "cokolwiek
+            -- bez spacji" (%S+), NIE tylko [%w_%-]+ jak poprzednio -- realne
+            -- nazwy narzędzi w tym ekosystemie zawierają znaki spoza
+            -- litery/cyfry/podkreślnika/myślnika (np. "H#"), więc węższa klasa
+            -- znaków po cichu GUBIŁA takie wpisy (linia nie pasowała do ŻADNEGO
+            -- z dwóch wzorców i była pomijana bez ostrzeżenia -- potem
+            -- manifest_version() wywalał się "brak wpisu", mimo że linia W
+            -- PLIKU realnie istniała).
+            local bname, bver = line:match('^%s*%-%>%s*(%S+)%s*=>%s*(%S+)%s*$')
             local name, ver = qname or bname, qver or bver
             if name and ver then
                 tools[name] = ver
@@ -169,14 +177,17 @@ local VER_GAMING = manifest_version("gaming-cli")
 -- step_container_pre_build)
 local VER_HAMMER = manifest_version("hammer")
 
--- Kategoria: binarki DODATKOWE, WYLACZNIE dla edycji --container (patrz
--- step_container_pre_build) -- kontener HackerOS-Builder ma miec
--- narzedzia deweloperskie ekosystemu HackerOS gotowe od razu w /usr/bin/,
--- czego zwykla instalacja (official/atomic/...) nie robi.
-local VER_HACKERSCRIPT     = manifest_version("HackerScript")
-local VER_HSHARP           = manifest_version("H#")
-local VER_BYTES            = manifest_version("Bytes")
-local VER_HACKEROS_BUILDER = manifest_version("HackerOS-Builder")
+-- UWAGA: WERSJE narzędzi dodatkowych dla --container (HackerScript, H#,
+-- Bytes, HackerOS Builder) CELOWO NIE są odczytywane tutaj jako
+-- top-level local (jak VER_HAMMER powyżej) -- gdyby były, manifest_version()
+-- przerywałby build.lua przy KAŻDEJ edycji (nawet --atomic, --gaming, bez
+-- flagi...), jeśli w packages/manifest.hk zabraknie któregoś z tych
+-- wpisów (bo cały plik build.lua jest wykonywany od góry do dołu zanim
+-- main() w ogóle spojrzy na flagę --container). Realnie tak się właśnie
+-- stało: build --atomic wywalał się błędem "brak wpisu HackerOS-Builder",
+-- mimo że --container nawet nie było użyte. Odczyt tych wersji jest więc
+-- PRZENIESIONY do step_container_extra_tools() niżej -- wykonuje się
+-- wyłącznie gdy faktycznie budujemy --container.
 
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
@@ -949,17 +960,16 @@ local function step_container_extra_tools()
     -- "HackerOS-Linux-System" jak reszta -- dlatego pełna ścieżka
     -- org/repo jest podawana jawnie dla każdego narzędzia zamiast
     -- zakładać wspólny prefiks (tak jak robią to inne pętle w tym pliku).
+    --
+    -- Wersje odczytywane TUTAJ (dopiero w momencie wywołania tej funkcji,
+    -- NIE jako top-level local na górze pliku) -- patrz komentarz przy
+    -- VER_HAMMER. Klucze DOKŁADNIE takie, jak w packages/manifest.hk
+    -- (uwaga: "HackerOS Builder" ma SPACJĘ, nie myślnik).
     local extra_tools = {
-        -- UWAGA co do nazwy binarki: repozytorium/wydania HackerScript nie
-        -- były dostępne w chwili pisania tego skryptu, więc nazwa pliku
-        -- wydania została przyjęta analogicznie do reszty narzędzi
-        -- ekosystemu (nazwa binarki = nazwa repo, małymi literami, bez
-        -- myślników) -- jeśli faktyczne wydanie publikuje binarkę pod
-        -- inną nazwą, zmień WYŁĄCZNIE pole "name" poniżej.
-        { name = "hackerscript",     org_repo = "HackerOS-Linux-System/HackerScript",     ver = VER_HACKERSCRIPT },
-        { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = VER_HSHARP },
-        { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = VER_BYTES },
-        { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = VER_HACKEROS_BUILDER },
+        { name = "hackerscript",     org_repo = "HackerOS-Linux-System/HackerScript",     ver = manifest_version("HackerScript") },
+        { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = manifest_version("H#") },
+        { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = manifest_version("Bytes") },
+        { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = manifest_version("HackerOS Builder") },
         -- hammer jest też pobierany dla --atomic (step_atomic_pre_build),
         -- ale to ODDZIELNE wywołanie/miejsce w drzewie -- kontener ma
         -- dostać własną kopię w TYM SAMYM miejscu co pozostałe narzędzia.
