@@ -21,7 +21,7 @@ end
 
 -- Edycja LTS bazuje na Debian Stable (trixie), a nie na testing/forky jak
 -- edycja official - debootstrap już zna "trixie" natywnie, więc (w
--- przeciwieństwie do build-hackeros/build-hackeros-hwde/-hydra/-blue) NIE
+-- przeciwieństwie do build-hackeros/-hydra/-blue) NIE
 -- podpinamy jej pod skrypt "sid".
 
 -- Czyścimy poprzednie buildy
