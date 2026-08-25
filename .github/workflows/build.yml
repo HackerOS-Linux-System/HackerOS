@@ -25,6 +25,16 @@ env:
   # Wersja Lua do zbudowania ze źródeł (na dzień pisania tego workflow Lua 5.5
   # nie ma jeszcze paczki w repozytoriach Ubuntu, więc kompilujemy ją ręcznie).
   LUA_VERSION: "5.5.0"
+# Patrz identyczny komentarz w .github/workflows/build-container.yml -- ten
+# workflow ma DODATKOWO trigger "push" na dwa branche i macierz wielu
+# edycji naraz (job "build"), więc kolejne szybkie pushe potrafią spiętrzyć
+# jeszcze więcej równoległych/kolejkowanych jobów niż gdziekolwiek indziej
+# w tym repo. "cancel-in-progress" anuluje CAŁY poprzedni, nieaktualny run
+# (wszystkie jego joby macierzy) w momencie startu nowego dla tego samego
+# brancha/inputu.
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   setup:
     runs-on: ubuntu-24.04
