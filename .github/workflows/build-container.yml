@@ -46,10 +46,28 @@ on:
 env:
   LUA_VERSION: "5.5.0"
   HACKEROS_BUILDER_REPO: "HackerOS-Linux-System/HackerOS-Builder"
+# BEZ tego bloku każdy push do packages/manifest.hk (a edytowaliśmy ten
+# plik wielokrotnie z rzędu) kolejkuje KOLEJNY, w pełni niezależny run
+# tego workflowa -- poprzedni NIE jest anulowany, więc runy piętrzą się
+# jeden za drugim w stanie "Queued" (czekają, aż zwolni się miejsce w
+# limicie równoległych jobów konta/organizacji), mimo że interesuje nas
+# tylko WYNIK OSTATNIEGO pushu. "cancel-in-progress: true" anuluje
+# wcześniejszy, już nieaktualny run w tej samej grupie w momencie
+# startu nowego -- dokładnie ten sam mechanizm już stosowany w
+# .github/workflows/build.yml repo HackerOS-Builder.
+concurrency:
+  group: build-container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    # 180 minut było nadmiarowe dla "build container" (bez ISO/squashfs to
+    # zdecydowanie krótszy build niż build-immuntable.yml) -- niższy limit
+    # oznacza, że ewentualny zawieszony/zablokowany krok (np. czekający na
+    # jakiś prompt apt) zwalnia miejsce w limicie równoległych jobów
+    # szybciej, zamiast trzymać je (i blokować kolejne runy w "Queued")
+    # przez maksymalnie 3 godziny.
+    timeout-minutes: 60
     steps:
       - name: Checkout repozytorium
         uses: actions/checkout@v4
