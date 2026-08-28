@@ -960,13 +960,17 @@ local function step_container_extra_tools()
     -- "HackerOS-Linux-System" jak reszta -- dlatego pełna ścieżka
     -- org/repo jest podawana jawnie dla każdego narzędzia zamiast
     -- zakładać wspólny prefiks (tak jak robią to inne pętle w tym pliku).
+    -- Analogicznie: Virus (nazwa narzędzia/klucz w manifeście) jest
+    -- publikowany pod REPOZYTORIUM "HackerScript" (repo nie zostało
+    -- przemianowane wraz z narzędziem) -- stąd org_repo poniżej wskazuje
+    -- na .../HackerScript, mimo że name = "virus".
     --
     -- Wersje odczytywane TUTAJ (dopiero w momencie wywołania tej funkcji,
     -- NIE jako top-level local na górze pliku) -- patrz komentarz przy
     -- VER_HAMMER. Klucze DOKŁADNIE takie, jak w packages/manifest.hk
     -- (uwaga: "HackerOS Builder" ma SPACJĘ, nie myślnik).
     local extra_tools = {
-        { name = "virus",            org_repo = "HackerOS-Linux-System/Virus",             ver = manifest_version("Virus") },
+        { name = "virus",            org_repo = "HackerOS-Linux-System/HackerScript",      ver = manifest_version("Virus") },
         { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = manifest_version("H#") },
         { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = manifest_version("Bytes") },
         { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = manifest_version("HackerOS Builder") },
