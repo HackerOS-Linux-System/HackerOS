@@ -177,7 +177,7 @@ local VER_GAMING = manifest_version("gaming-cli")
 -- step_container_pre_build)
 local VER_HAMMER = manifest_version("hammer")
 
--- UWAGA: WERSJE narzędzi dodatkowych dla --container (HackerScript, H#,
+-- UWAGA: WERSJE narzędzi dodatkowych dla --container (Virus, H#,
 -- Bytes, HackerOS Builder) CELOWO NIE są odczytywane tutaj jako
 -- top-level local (jak VER_HAMMER powyżej) -- gdyby były, manifest_version()
 -- przerywałby build.lua przy KAŻDEJ edycji (nawet --atomic, --gaming, bez
@@ -966,7 +966,7 @@ local function step_container_extra_tools()
     -- VER_HAMMER. Klucze DOKŁADNIE takie, jak w packages/manifest.hk
     -- (uwaga: "HackerOS Builder" ma SPACJĘ, nie myślnik).
     local extra_tools = {
-        { name = "hackerscript",     org_repo = "HackerOS-Linux-System/HackerScript",     ver = manifest_version("HackerScript") },
+        { name = "virus",            org_repo = "HackerOS-Linux-System/Virus",             ver = manifest_version("Virus") },
         { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = manifest_version("H#") },
         { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = manifest_version("Bytes") },
         { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = manifest_version("HackerOS Builder") },
