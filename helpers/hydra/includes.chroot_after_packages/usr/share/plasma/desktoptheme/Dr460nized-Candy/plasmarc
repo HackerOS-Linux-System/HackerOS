@@ -1,0 +1,12 @@
+[AdaptiveTransparency]
+enabled=true
+
+[BlurBehindEffect]
+enabled=true
+
+#[ContrastEffect]
+#saturation=0
+#contrast=100
+
+[Settings]
+FallbackTheme=Sweet 

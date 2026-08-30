@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "FGD"
+            }
+        ],
+        "Category": "Plasma Theme",
+        "Description": "A candy, modern theme for Plasma 6 with Plasma Dock",
+        "EnabledByDefault": true,
+        "Id": "Dr460nized Candy",
+        "License": "CC BY-SA 4.0",
+        "Name": "Dr460nized Candy",
+        "Version": "1.0.0"
+    },
+    "X-KDE-PluginInfo-Id": "Dr460nized-Candy",
+    "X-Plasma-API": "5.0"
+}

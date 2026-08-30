@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Dr460nized
+Comment=A dark and modern theme for Plasma 5
+X-KDE-PluginInfo-Author=dr460nf1r3
+X-KDE-PluginInfo-Email=dr460nf1r3@garudalinux.org
+X-KDE-PluginInfo-Name=Dr460nized
+X-KDE-PluginInfo-Version=1.0.0
+X-KDE-PluginInfo-Website=https://garudalinux.org
+X-KDE-PluginInfo-Category=Plasma Theme
+X-KDE-PluginInfo-License=CC BY-SA 4.0
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=5.0
+
+[AdaptiveTransparency]
+enabled=true

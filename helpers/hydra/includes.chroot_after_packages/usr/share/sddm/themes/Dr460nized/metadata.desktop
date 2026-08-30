@@ -1,0 +1,17 @@
+[SddmGreeterTheme]
+Name=Dr460nized
+Description=Dr460nized SDDM theme based on Sweet theme
+Author=Eliver Lara & Garuda
+Copyright=(c) 2019, Eliver Lara
+License=GPL 3+
+Type=sddm-theme
+Version=0.1
+Website=https://github.com/EliverLara/Sweet/tree/nova/kde/sddm
+Screenshot=preview.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=translations
+Email=eliverlara@gmail.com
+Theme-Id=Dr460nized
+Theme-API=2.0
+QtVersion=6

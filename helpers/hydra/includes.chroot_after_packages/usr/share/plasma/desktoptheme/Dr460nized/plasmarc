@@ -1,0 +1,17 @@
+[Theme]
+name=Dr460nized
+
+[Wallpaper]
+defaultWallpaperTheme=Malefor
+defaultFileSuffix=.jpg
+defaultWidth=3840
+defaultHeight=1920
+
+[Settings]
+FallbackTheme=Sweet
+
+[AdaptiveTransparency]
+enabled=true
+
+[BlurBehindEffect]
+enabled=true

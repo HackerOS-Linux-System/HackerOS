@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "dr460nf1r3@garudalinux.org",
+                "Name": "dr460nf1r3 and FGD"
+            }
+        ],
+        "Category": "Plasma Theme",
+        "Description": "A dark and modern theme for Plasma 6",
+        "EnabledByDefault": true,
+        "Id": "Dr460nized",
+        "License": "CC BY-SA 4.0",
+        "Name": "Dr460nized",
+        "Version": "2.0.0",
+        "Website": "https://garudalinux.org"
+    },
+    "X-Plasma-API": "5.0"
+}

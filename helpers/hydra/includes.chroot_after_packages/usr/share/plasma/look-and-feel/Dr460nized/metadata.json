@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "dr460nf1r3@garudalinux.org",
+                "Name": "dr460nf1r3 and FGD"
+            }
+        ],
+        "Category": "",
+        "Description": "Dr460nized by Garuda",
+        "EnabledByDefault": true,
+        "Id": "Dr460nized",
+        "License": "GPL 3+",
+        "Name": "Dr460nized",
+        "Version": "2.0",
+        "Website": "https://garudalinux.org"
+    },
+    "X-Plasma-APIVersion": "2"
+}
