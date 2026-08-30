@@ -25,14 +25,14 @@ end
 -- Katalogi docelowe
 local BLUE_DIR       = "config/includes.chroot_after_packages/usr/share/Blue-Environment"
 local WALLPAPER_DIR  = "config/includes.chroot_after_packages/usr/share/wallpapers"
+local BIN_DIR        = "config/includes.chroot_after_packages/usr/bin"
 
--- POPRAWKA: wcześniej pobieraliśmy pojedyncze binarki (blue-environment,
--- blue-compositor, blue) osobno z releasu "v0.6" - teraz cały wygląd/env
--- jest paczkowany jako jedno archiwum .tar.gz w releasie "snapshot-v0.6",
--- które po prostu rozpakowujemy w całości do BLUE_DIR (usr/share/Blue-Environment).
-local RELEASE_BASE  = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/snapshot-v0.6"
-local ARCHIVE_URL   = RELEASE_BASE .. "/Blue-Environment.tar.gz"
-local ARCHIVE_TMP   = "/tmp/Blue-Environment.tar.gz"
+-- POPRAWKA: zamiast pobierać jedno wspólne archiwum .tar.gz (które trafiało
+-- w miejsca releasów bez tej ścieżki i wywalało build), pobieramy każdą
+-- binarkę osobno, bezpośrednio z jej właściwego, konkretnego releasu.
+local BLUE_ENV_URL   = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.6/blue-environment"
+local HACKEROS_COMP_URL = "https://github.com/HackerOS-Linux-System/HackerOS-Comp/releases/download/v0.2/hackeros-comp"
+local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.0.1"
 
 -- Raw URL (blob/tree nie nadają się do pobierania bezpośrednio)
 local WALLPAPER_URL = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/images/default.png"
@@ -48,20 +48,16 @@ sh("cp -r helpers/blue/. config/")
 --------------------------------------------------------------------------
 sh("mkdir -p " .. quote(BLUE_DIR))
 sh("mkdir -p " .. quote(WALLPAPER_DIR))
+sh("mkdir -p " .. quote(BIN_DIR))
 
 --------------------------------------------------------------------------
--- 3. Pobieramy i rozpakowujemy archiwum Blue-Environment.tar.gz
+-- 3. Pobieramy binarkę blue-environment do /usr/share/Blue-Environment
 --------------------------------------------------------------------------
-download(ARCHIVE_URL, ARCHIVE_TMP)
-sh("tar -xzf " .. quote(ARCHIVE_TMP) .. " -C " .. quote(BLUE_DIR))
-sh("rm -f " .. quote(ARCHIVE_TMP))
-
--- Wszystko, co było w archiwum, powinno być uruchamialne (skrypty/binarki
--- środowiska graficznego) - nadajemy prawa wykonywania rekurencyjnie tylko
--- plikom (nie katalogom), żeby nie zepsuć uprawnień np. plikom konfiguracyjnym
--- w sposób niezamierzony; jeśli archiwum ma już poprawne uprawnienia, to i
--- tak nic złego się nie stanie.
-sh("find " .. quote(BLUE_DIR) .. " -maxdepth 2 -type f -name 'blue*' -exec chmod a+x {} +", true)
+do
+    local dest = BLUE_DIR .. "/blue-environment"
+    download(BLUE_ENV_URL, dest)
+    sh("chmod a+x " .. quote(dest))
+end
 
 --------------------------------------------------------------------------
 -- 4. Pobieramy domyślną tapetę (best-effort - nie przerywamy builda, jeśli
@@ -71,16 +67,23 @@ sh("find " .. quote(BLUE_DIR) .. " -maxdepth 2 -type f -name 'blue*' -exec chmod
 download(WALLPAPER_URL, WALLPAPER_DIR .. "/default.png", true)
 
 --------------------------------------------------------------------------
--- 5. Pobieramy binarki bedm / bedm-greeter do /usr/bin
+-- 5. Pobieramy hackeros-comp do /usr/bin
 --------------------------------------------------------------------------
--- POPRAWKA: te binarki wcześniej trafiały (błędnie) do
--- build/build-hackeros-cybersecurity-default - to binarki środowiska Blue,
--- więc ich miejsce jest tutaj, w build-hackeros-blue.
-local BIN_DIR = "config/includes.chroot_after_packages/usr/bin"
-sh("mkdir -p " .. quote(BIN_DIR))
-for _, name in ipairs({ "bedm", "bedm-greeter" }) do
+do
+    local dest = BIN_DIR .. "/hackeros-comp"
+    download(HACKEROS_COMP_URL, dest)
+    sh("chmod a+x " .. quote(dest))
+end
+
+--------------------------------------------------------------------------
+-- 6. Pobieramy binarki hdm / hdm-greeter (z releasu HDM v0.0.1) do /usr/bin
+--------------------------------------------------------------------------
+-- POPRAWKA: wcześniej pobierane były (błędnie) bedm/bedm-greeter z releasu
+-- Blue-Environment - teraz pobieramy właściwe binarki hdm/hdm-greeter,
+-- z ich właściwego repozytorium HDM.
+for _, name in ipairs({ "hdm", "hdm-greeter" }) do
     local dest = BIN_DIR .. "/" .. name
-    download(RELEASE_BASE .. "/" .. name, dest)
+    download(HDM_BASE .. "/" .. name, dest)
     sh("chmod a+x " .. quote(dest))
 end
 
