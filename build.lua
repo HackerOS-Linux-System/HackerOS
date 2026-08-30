@@ -877,8 +877,11 @@ local CONTAINER_PACKAGE_LIST_SRC = "helpers/container/package-list"
 local PACKAGE_LISTS_DIR          = "config/package-lists"
 local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chroot"
 
--- Usuwa config/package-lists/live.list.chroot ORAZ cały katalog
--- includes.chroot_after_packages/etc/calamares.
+-- Usuwa config/package-lists/live.list.chroot, cały katalog
+-- includes.chroot_after_packages/etc/calamares ORAZ hook
+-- hooks/normal/user-setup.hook.chroot -- wszystkie trzy są elementami
+-- PEŁNEGO środowiska graficznego (live-build/atomic), kompletnie
+-- nieodpowiednimi dla zwykłego, headless kontenera roboczego.
 --
 -- Dlaczego CAŁY live.list.chroot, nie tylko wpisy calamares (jak robi to
 -- build/build-hackeros-atomic dla edycji --atomic): live.list.chroot to
@@ -908,6 +911,18 @@ local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chro
 -- mechanizm dla KAŻDEGO build targetu -- cloud/iso/container), więc
 -- usunięcie etc/calamares TUTAJ, PRZED wywołaniem hackeros-buildera, jest
 -- równoznaczne z "skopiuj etc/ do /etc poza katalogiem calamares".
+--
+-- hooks/normal/user-setup.hook.chroot (POPRAWKA BŁĘDU): ten hook tworzy
+-- konto "user" z hasłem i dopisuje mu bezhasłowe sudo do
+-- /etc/sudoers.d/live-user -- sensowne dla live-ISO/atomic z pełnym
+-- środowiskiem graficznym, ale kontener NIE ma nawet pakietu "sudo" na
+-- swojej (minimalnej) liście pakietów, więc katalog /etc/sudoers.d/ w
+-- ogóle nie istnieje w chroocie i hook wywala się na
+-- "echo ... > /etc/sudoers.d/live-user: No such file or directory",
+-- przerywając cały build (hooki mają "set -e"). Usuwamy go tu z tego
+-- samego powodu co live.list.chroot/calamares wyżej -- hackeros-builder
+-- wykonuje WSZYSTKIE hooki z config/hooks/ bezwarunkowo, więc musi
+-- zniknąć PRZED wywołaniem hackeros-buildera.
 local function remove_desktop_packages_and_calamares_for_container()
     local liveListPath = PACKAGE_LISTS_DIR .. "/live.list.chroot"
     if exists(liveListPath) then
@@ -919,6 +934,12 @@ local function remove_desktop_packages_and_calamares_for_container()
     if exists(calamaresConfigDir) then
         sh("rm -rf " .. quote(calamaresConfigDir))
         io.write("Usunięto katalog: " .. calamaresConfigDir .. "\n")
+    end
+
+    local userSetupHook = "config/hooks/normal/user-setup.hook.chroot"
+    if exists(userSetupHook) then
+        sh("rm -f " .. quote(userSetupHook))
+        io.write("Usunięto (tylko dla --container, brak pakietu sudo): " .. userSetupHook .. "\n")
     end
 end
 
@@ -1194,7 +1215,14 @@ local function main()
         pre_build_fn()
     end
 
-    step_apply_boot_splash()
+    -- --container nigdy nie ma zainstalowanego live-build/GRUB/isolinux
+    -- (to zwykły rootfs roboczy, bez bootloadera w ogóle) -- ten krok już
+    -- i tak bezpiecznie pomija się sam (patrz brak LB_BOOTLOADERS_DIR
+    -- wyżej), ale skoro wiemy to z góry dla tej konkretnej edycji, nie ma
+    -- sensu go w ogóle uruchamiać/wypisywać dla niej.
+    if edition ~= "container" then
+        step_apply_boot_splash()
+    end
     step_run_build(edition)
 end
 
