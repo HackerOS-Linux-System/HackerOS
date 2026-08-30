@@ -14,37 +14,22 @@ local function sh(cmd)
     return true
 end
 
--- === Przygotowanie: pobranie plików wyglądu (hydra-look-and-feel) ===
-
-local repo_url  = "https://github.com/HackerOS-Linux-System/hydra-look-and-feel.git"
-local clone_dir = "/tmp/hydra-look-and-feel"
-
--- Usuwamy ewentualną poprzednią kopię w /tmp, żeby klonowanie się nie wywaliło
-sh("rm -rf " .. quote(clone_dir))
-
--- Klonujemy repozytorium do /tmp
-sh("git clone --depth 1 " .. quote(repo_url) .. " " .. quote(clone_dir))
-
--- Upewniamy się, że katalog config/includes.chroot_after_packages/ istnieje
--- w bieżącym miejscu wykonania skryptu.
+-- === Przygotowanie: pliki wyglądu (hydra-look-and-feel) z lokalnego repo ===
 --
--- UWAGA (poprawka błędu): katalog files/ w repo hydra-look-and-feel zawiera
--- bezpośrednio "etc/" i "usr/" (czyli już samą treść, którą live-build ma
--- wgrać do systemu plików obrazu). Kopiowanie go do "config/" (czyli
--- config/etc, config/usr) NIC nie robi z punktu widzenia live-build - ten
--- katalog nie jest przez nie w żaden sposób interpretowany. live-build
--- rozpoznaje wyłącznie config/includes.chroot_after_packages/ (kopiowane
--- do obrazu PO instalacji pakietów) jako miejsce na tego typu pliki
--- systemowe - stąd finalne ISO nie miało tych plików mimo poprawnego
--- sklonowania repo i "udanego" kopiowania.
-local target_dir = "config/includes.chroot_after_packages"
+-- Skrypt jest CAŁKOWICIE niezależny od zewnętrznych repozytoriów --
+-- nic nie jest klonowane z sieci. Zamiast tego kopiujemy wprost
+-- zawartość lokalnego katalogu helpers/hydra (dostarczonego w TYM
+-- repo) do config/ -- dokładnie tak samo, jak robi to
+-- step_hydra_pre_build()/copy_helper_dir() w build.lua dla innych
+-- edycji (helpers/gaming, helpers/hydra, ...): "cp -r helpers/hydra/. config/".
+-- Struktura helpers/hydra/includes.chroot_after_packages/... trafia
+-- więc finalnie pod config/includes.chroot_after_packages/..., czyli
+-- dokładnie tam, gdzie live-build faktycznie szuka tych plików.
+local src_dir    = "helpers/hydra"
+local target_dir = "config"
+
 sh("mkdir -p " .. quote(target_dir))
-
--- Kopiujemy całą zawartość katalogu files/ z repo do config/includes.chroot_after_packages/
-sh("cp -r " .. quote(clone_dir .. "/files/.") .. " " .. quote(target_dir .. "/"))
-
--- Sprzątamy sklonowane repo z /tmp (opcjonalnie, ale porządkuje środowisko)
-sh("rm -rf " .. quote(clone_dir))
+sh("cp -r " .. quote(src_dir .. "/.") .. " " .. quote(target_dir .. "/"))
 
 -- === Właściwy proces budowania obrazu ===
 
