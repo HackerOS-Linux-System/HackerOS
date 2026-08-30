@@ -213,10 +213,27 @@ jobs:
           chmod +x build.lua
           lua5.5 build.lua --container
 
+      - name: Naprawa uprawnien po buildzie (sudo hackeros-builder tworzy pliki jako root)
+        run: |
+          # POPRAWKA BLEDU: build.lua --container woLa "sudo hackeros-builder
+          # ...", wiec caly katalog roboczy (hackeros-build-work-container/,
+          # w tym finalne archiwum .tar) zostaje utworzony jako root:root.
+          # Kolejne kroki tego joba dzialaja juz jako zwykly uzytkownik
+          # runnera (bez sudo) -- bez tego chowna "find" wywala sie na
+          # "Permission denied" przy probie wejscia do rootfs-container/root
+          # (katalog /root wypakowanego rootfsa, normalnie 700), a nastepny
+          # krok "mv" na samym archiwum .tar konczy sie tym samym bledem.
+          sudo chown -R "$(id -u):$(id -g)" .
+
       - name: Wyszukanie zbudowanego archiwum kontenera (.tar)
         id: find_tar
         run: |
-          echo "tar_found=$(find . -maxdepth 4 -iname '*.tar' | head -n1)" >> "$GITHUB_OUTPUT"
+          # Zawezone do wlasciwego katalogu wyjsciowego hackeros-buildera
+          # (<workdir>/container/<nazwa>-<tag>.tar, patrz
+          # internal/buildflow/container.go w repo HackerOS-Builder) zamiast
+          # przeszukiwania calego drzewa repo -- szybsze i nie ryzykuje
+          # trafienia na przypadkowy inny plik .tar spoza builda.
+          echo "tar_found=$(find . -path '*/container/*' -maxdepth 4 -iname '*.tar' | head -n1)" >> "$GITHUB_OUTPUT"
 
       - name: Zmiana nazwy archiwum kontenera
         id: rename_tar
