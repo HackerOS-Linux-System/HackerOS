@@ -878,10 +878,11 @@ local PACKAGE_LISTS_DIR          = "config/package-lists"
 local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chroot"
 
 -- Usuwa config/package-lists/live.list.chroot, cały katalog
--- includes.chroot_after_packages/etc/calamares ORAZ hook
--- hooks/normal/user-setup.hook.chroot -- wszystkie trzy są elementami
--- PEŁNEGO środowiska graficznego (live-build/atomic), kompletnie
--- nieodpowiednimi dla zwykłego, headless kontenera roboczego.
+-- includes.chroot_after_packages/etc/calamares ORAZ hooki
+-- hooks/normal/user-setup.hook.chroot i
+-- hooks/live/plymouth-spinner-theme.hook.chroot -- wszystkie cztery są
+-- elementami PEŁNEGO środowiska graficznego (live-build/atomic),
+-- kompletnie nieodpowiednimi dla zwykłego, headless kontenera roboczego.
 --
 -- Dlaczego CAŁY live.list.chroot, nie tylko wpisy calamares (jak robi to
 -- build/build-hackeros-atomic dla edycji --atomic): live.list.chroot to
@@ -940,6 +941,21 @@ local function remove_desktop_packages_and_calamares_for_container()
     if exists(userSetupHook) then
         sh("rm -f " .. quote(userSetupHook))
         io.write("Usunięto (tylko dla --container, brak pakietu sudo): " .. userSetupHook .. "\n")
+    end
+
+    -- hooks/live/plymouth-spinner-theme.hook.chroot (POPRAWKA BŁĘDU): ten
+    -- hook konfiguruje motyw ekranu rozruchowego (splash) Plymouth --
+    -- wymaga pakietów "plymouth"/"plymouth-themes" z
+    -- config/package-lists/live.list.chroot. Ten plik jest już usuwany
+    -- wyżej dla --container (kontener nie ma bootloadera/initramfs w
+    -- rozumieniu ekranu startowego), więc "plymouth" nigdy nie jest
+    -- zainstalowany i hook wywala się na braku polecenia
+    -- "plymouth-set-default-theme", przerywając cały build. Usuwamy go z
+    -- tego samego powodu co user-setup.hook.chroot wyżej.
+    local plymouthHook = "config/hooks/live/plymouth-spinner-theme.hook.chroot"
+    if exists(plymouthHook) then
+        sh("rm -f " .. quote(plymouthHook))
+        io.write("Usunięto (tylko dla --container, brak pakietu plymouth): " .. plymouthHook .. "\n")
     end
 end
 
