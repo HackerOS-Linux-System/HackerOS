@@ -873,7 +873,7 @@ end
 -- formacie *.list.chroot. Dostarczany osobno (poza tym repo w chwili
 -- pisania tego kodu) -- patrz KROK "lista pakietów" niżej, który go
 -- konwertuje do formatu jakiego oczekuje hackeros-builder.
-local CONTAINER_PACKAGE_LIST_SRC = "helpers/container/package-list"
+local CONTAINER_PACKAGE_LIST_SRC = "helpers/container/package-lists"
 local PACKAGE_LISTS_DIR          = "config/package-lists"
 local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chroot"
 
@@ -889,7 +889,7 @@ local CONTAINER_PACKAGE_LIST_DST = PACKAGE_LISTS_DIR .. "/99-container.list.chro
 -- dolphin, kate, ...) przygotowana pod live-build/atomic -- kompletnie
 -- nieodpowiednia dla zwykłego, headless kontenera roboczego. Jedynym
 -- źródłem prawdy o pakietach kontenera ma być
--- CONTAINER_PACKAGE_LIST_DST (skopiowany z helpers/container/package-list
+-- CONTAINER_PACKAGE_LIST_DST (skopiowany z helpers/container/package-lists
 -- w step_container_package_list) -- hackeros-builder scala WSZYSTKIE
 -- pliki *.list.chroot w config/package-lists/ bezwarunkowo (patrz
 -- internal/liveparse/project.go w repo hackeros-builder), więc
