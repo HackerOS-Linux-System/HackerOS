@@ -963,6 +963,19 @@ local function step_container_package_list()
 
     mkdirp(PACKAGE_LISTS_DIR)
     sh("cp " .. quote(CONTAINER_PACKAGE_LIST_SRC) .. " " .. quote(CONTAINER_PACKAGE_LIST_DST))
+
+    -- POPRAWKA BŁĘDU: CONTAINER_PACKAGE_LIST_SRC nazywa się DOKŁADNIE tak
+    -- samo jak PACKAGE_LISTS_DIR bez prefiksu "config/" (obydwa to
+    -- "package-lists") -- to zwykły PLIK, ale PACKAGE_LISTS_DIR to
+    -- KATALOG live-build/hackeros-buildera. Skoro jego zawartość jest już
+    -- bezpiecznie skopiowana wyżej do CONTAINER_PACKAGE_LIST_DST, sam plik
+    -- źródłowy nie jest już nigdzie potrzebny -- usuwamy go TUTAJ, PRZED
+    -- wywołaniem copy_helper_dir("helpers/container", false) w
+    -- step_container_pre_build(). W przeciwnym razie "cp -r
+    -- helpers/container/. config/" próbowałoby nadpisać KATALOG
+    -- config/package-lists tym PLIKIEM i wywalało się z
+    -- "cp: cannot overwrite directory ... with non-directory".
+    sh("rm -f " .. quote(CONTAINER_PACKAGE_LIST_SRC))
 end
 
 -- Pobiera do TARGET_BIN (config/includes.chroot_after_packages/usr/bin)
