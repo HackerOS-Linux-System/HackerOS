@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+
+# --hydra: helpers/hydra/includes.chroot_after_packages/usr/share/icons.tar.gz
+# ladowany jest przez ten sam mechanizm co reszta includes.chroot_after_packages
+# (zwykle kopiowanie plikow), wiec trafia do rootfs jako zwykly, NIGDY
+# nie rozpakowywany plik .tar.gz pod /usr/share/icons.tar.gz. W efekcie
+# motywy ikon/kursorow (BeautyLine, Sweet-cursors) spakowane w tym
+# archiwum nigdy fizycznie nie istnialy w systemie, mimo ze configi
+# (gtk-3.0/settings.ini, kdeglobals) juz na nie wskazuja -- stad domyslne
+# ikony zamiast BeautyLine.
+#
+# Ten hook (kategoria "normal") uruchamia sie PO skopiowaniu
+# includes.chroot_after_packages, wiec plik na pewno juz tam jest --
+# rozpakowujemy go we wlasciwe miejsce i usuwamy samo archiwum, zeby nie
+# zostawac w finalnym obrazie.
+ARCHIVE="/usr/share/icons.tar.gz"
+
+if [ -f "$ARCHIVE" ]; then
+    tar -xzf "$ARCHIVE" -C /usr/share
+    rm -f "$ARCHIVE"
+else
+    echo "Ostrzezenie: $ARCHIVE nie istnieje -- pomijam rozpakowywanie (edycja inna niz --hydra?)"
+fi
