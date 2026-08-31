@@ -82,91 +82,59 @@ plugin=org.kde.plasma.networkmanagement
 extraItems=org.kde.kdeconnect,org.kde.kscreen,org.kde.plasma.battery,org.kde.plasma.bluetooth,org.kde.plasma.brightness,org.kde.plasma.cameraindicator,org.kde.plasma.clipboard,org.kde.plasma.devicenotifier,org.kde.plasma.keyboardindicator,org.kde.plasma.keyboardlayout,org.kde.plasma.manage-inputmethod,org.kde.plasma.mediacontroller,org.kde.plasma.networkmanagement,org.kde.plasma.notifications,org.kde.plasma.volume
 knownItems=org.kde.kdeconnect,org.kde.kscreen,org.kde.plasma.battery,org.kde.plasma.bluetooth,org.kde.plasma.brightness,org.kde.plasma.cameraindicator,org.kde.plasma.clipboard,org.kde.plasma.devicenotifier,org.kde.plasma.keyboardindicator,org.kde.plasma.keyboardlayout,org.kde.plasma.manage-inputmethod,org.kde.plasma.mediacontroller,org.kde.plasma.networkmanagement,org.kde.plasma.notifications,org.kde.plasma.volume
 
-[Containments][2]
+[Containments][23]
 activityId=
 formfactor=2
 immutability=1
 lastScreen=0
-location=3
+location=4
 plugin=org.kde.panel
 wallpaperplugin=org.kde.image
 
-[Containments][2][Applets][10]
-immutability=1
-plugin=org.kde.plasma.systemtray
-
-[Containments][2][Applets][10][Configuration]
-SystrayContainmentId=11
-
-[Containments][2][Applets][22]
-immutability=1
-plugin=org.kde.plasma.userswitcher
-
-[Containments][2][Applets][22][Configuration][General]
-showFace=true
-showName=false
-showTechnicalInfo=true
-
-[Containments][2][Applets][3]
+[Containments][23][Applets][3]
 immutability=1
 plugin=org.kde.plasma.kickoff
 
-[Containments][2][Applets][3][Configuration]
+[Containments][23][Applets][3][Configuration]
 PreloadWeight=100
 popupHeight=482
 popupWidth=645
 
-[Containments][2][Applets][3][Configuration][General]
+[Containments][23][Applets][3][Configuration][General]
 favoritesPortedToKAstats=true
-icon=distributor-logo-garuda
+icon=HackerOS
 lengthFirstMargin=7
 
-[Containments][2][Applets][3][Configuration][Shortcuts]
+[Containments][23][Applets][3][Configuration][Shortcuts]
 global=Alt+F1
 
-[Containments][2][Applets][3][Shortcuts]
+[Containments][23][Applets][3][Shortcuts]
 global=Alt+F1
 
-[Containments][2][Applets][4]
+[Containments][23][Applets][24]
 immutability=1
-plugin=org.kde.windowbuttons
+plugin=org.kde.plasma.icontasks
 
-[Containments][2][Applets][4][Configuration][General]
-buttonSizePercentage=42
-containmentType=Plasma
-inactiveStateEnabled=true
-lengthFirstMargin=10
-lengthLastMargin=4
-lengthMarginsLock=false
-spacing=6
-useDecorationMetrics=false
-visibility=2
+[Containments][23][Applets][24][Configuration][General]
+fill=false
+iconSpacing=2
+launchers=preferred://terminal,preferred://browser,preferred://filemanager,applications:org.kde.plasma-systemmonitor.desktop,applications:systemsettings.desktop
+maxStripes=1
+showOnlyCurrentDesktop=false
+showOnlyCurrentScreen=false
 
-[Containments][2][Applets][5]
+[Containments][23][Applets][10]
 immutability=1
-plugin=org.kde.windowtitle
+plugin=org.kde.plasma.systemtray
 
-[Containments][2][Applets][5][Configuration][General]
-filterActivityInfo=false
-filterByScreen=true
-lengthFirstMargin=7
-lengthMarginsLock=false
-placeHolder=Dr460nized KDE 🔥
-showIcon=false
+[Containments][23][Applets][10][Configuration]
+SystrayContainmentId=11
 
-[Containments][2][Applets][6]
-immutability=1
-plugin=org.kde.plasma.appmenu
-
-[Containments][2][Applets][7]
-immutability=1
-plugin=org.kde.plasma.panelspacer
-
-[Containments][2][Applets][8]
+[Containments][23][Applets][8]
 immutability=1
 plugin=org.kde.plasma.digitalclock
 
-[Containments][2][Applets][8][Configuration][Appearance]
+[Containments][23][Applets][8][Configuration][Appearance]
 autoFontAndSize=false
 customDateFormat=dddd, MMM d |
 dateDisplayFormat=BesideTime
@@ -177,36 +145,8 @@ fontStyleName=Regular
 fontWeight=400
 showWeekNumbers=true
 
-[Containments][2][Applets][9]
-immutability=1
-plugin=org.kde.plasma.panelspacer
-
-[Containments][2][General]
-AppletOrder=3;4;5;6;7;8;9;10;22
-
-[Containments][23]
-activityId=
-formfactor=2
-immutability=1
-lastScreen=0
-location=4
-plugin=org.kde.panel
-wallpaperplugin=org.kde.image
-
-[Containments][23][Applets][24]
-immutability=1
-plugin=org.kde.plasma.icontasks
-
-[Containments][23][Applets][24][Configuration][General]
-fill=false
-iconSpacing=2
-launchers=applications:garuda-welcome.desktop,applications:org.kde.konsole.desktop,preferred://browser,preferred://filemanager,applications:org.kde.plasma-systemmonitor.desktop,applications:snapper-tools.desktop,applications:systemsettings.desktop,applications:octopi.desktop
-maxStripes=1
-showOnlyCurrentDesktop=false
-showOnlyCurrentScreen=false
-
 [Containments][23][General]
-AppletOrder=24
+AppletOrder=3;24;10;8
 
 [ScreenMapping]
 itemsOnDisabledScreens=
