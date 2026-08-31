@@ -16,7 +16,7 @@ wobblywindowsEnabled=true
 LayoutName=coverswitch
 
 [Windows]
-BorderlessMaximizedWindows=true
+BorderlessMaximizedWindows=false
 
 [Xwayland]
 Scale=1
@@ -25,3 +25,5 @@ Scale=1
 BorderSizeAuto=false
 ButtonsOnLeft=XAI
 ButtonsOnRight=
+library=org.kde.kwin.aurorae
+theme=__aurorae__svg__Dr460nized-Rounded
