@@ -1,0 +1,18 @@
+{
+  "wallpaper": "file:///usr/share/wallpapers/default.png",
+  "theme": "dark",
+  "theme_name": "",
+  "accent_color": "",
+  "display_scale": 0.0,
+  "desktop_path": "",
+  "panel_enabled": false,
+  "panel_position": "",
+  "panel_size": 0,
+  "panel_opacity": 0.0,
+  "language": "pl",
+  "night_light_enabled": false,
+  "night_light_temperature": 0,
+  "night_light_schedule": "",
+  "night_light_start_hour": 0,
+  "night_light_end_hour": 0
+}
