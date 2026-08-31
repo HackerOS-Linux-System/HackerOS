@@ -133,6 +133,7 @@ ForegroundPositive=39,174,96
 ForegroundVisited=155,89,182
 
 [General]
+ColorScheme=Sweet
 ColorSchemeHash=7b61368c55eaab4075e7b1ae9501f3675b0f830f
 fixed=FiraCode Nerd Font Mono,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 font=Fira Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
@@ -140,9 +141,14 @@ menuFont=Fira Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 smallestReadableFont=Fira Sans,8,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 toolBarFont=Fira Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 
+[Icons]
+Theme=BeautyLine
+
 [KDE]
+ColorScheme=Sweet
 LookAndFeelPackage=Dr460nized
 SingleClick=true
+widgetStyle=kvantum-dark
 
 [WM]
 activeBackground=39,44,49
