@@ -147,6 +147,7 @@ showWeekNumbers=true
 
 [Containments][23][General]
 AppletOrder=3;24;10;8
+floating=true
 
 [ScreenMapping]
 itemsOnDisabledScreens=
