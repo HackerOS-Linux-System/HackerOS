@@ -32,7 +32,7 @@ Image=Malefor
 WallpaperPlugin=org.kde.image
 
 [kscreenlockerrc][Greeter][Wallpaper][org.kde.image][General]
-Image=file:///usr/share/wallpapers/garuda-wallpapers/Malefor.jpg
+Image=file:///usr/share/wallpapers/Malefor/contents/images/3840x1920.jpg
 
 [gtk-3.0/settings.ini][Settings]
 gtk-theme-name=Sweet-Dark
