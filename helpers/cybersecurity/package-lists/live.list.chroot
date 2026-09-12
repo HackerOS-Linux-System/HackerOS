@@ -114,5 +114,10 @@ aptitude
 gdb
 
 # analiza ruchu / web - uzupełnienie Wiresharka i Burpa
-zaproxy
+# UWAGA: "zaproxy" (OWASP ZAP) CELOWO usunięte stąd -- ten pakiet w ogóle
+# NIE istnieje w oficjalnych repozytoriach Debiana (sprawdzone na
+# packages.debian.org -- ani pod nazwą "zaproxy", ani "zap"; to nie
+# literówka w wersji jak zwykle, tylko trwały brak w archiwum). Zamiast
+# tego instalowany osobnym hookiem z oficjalnego tarballa GitHub, patrz
+# hooks/live/install-zaproxy.hook.chroot.
 termshark
