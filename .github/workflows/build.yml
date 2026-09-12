@@ -180,7 +180,23 @@ jobs:
           # (ta sama gałąź, z której pochodzi pakiet w Debianie - obecnie
           # w testing/unstable), żeby mieć aktualne zachowanie i opcje.
           rm -rf /tmp/live-build-src
-          git clone --depth 1 https://salsa.debian.org/live-team/live-build.git /tmp/live-build-src
+          # POPRAWKA: salsa.debian.org (infrastruktura Debiana) bywa
+          # przejściowo niedostępna ("Failed to connect to salsa.debian.org
+          # port 443") -- pojedyncze zacięcie się tego jednego klonowania
+          # nie powinno wywalać całego builda edycji. Retry z odczekaniem
+          # zamiast twardego wyjścia za pierwszym razem.
+          for attempt in 1 2 3 4 5; do
+            if git clone --depth 1 https://salsa.debian.org/live-team/live-build.git /tmp/live-build-src; then
+              break
+            fi
+            echo "Próba $attempt/5 klonowania live-build nie powiodła się, ponawiam za 15s..."
+            rm -rf /tmp/live-build-src
+            sleep 15
+            if [ "$attempt" = "5" ]; then
+              echo "Błąd: nie udało się sklonować live-build po 5 próbach."
+              exit 1
+            fi
+          done
           cd /tmp/live-build-src
           dpkg-buildpackage -b -uc -us
           cd ..
