@@ -22,6 +22,33 @@ local function download(url, dest, allow_fail)
     sh("wget -q --show-progress -O " .. quote(dest) .. " " .. quote(url), allow_fail)
 end
 
+-- POPRAWKA BLEDU: zamiast trzymac tu na sztywno numer tagu releasu (co
+-- regularnie psulo sie przy kazdej nowej wersji hackeros-comp -- 404,
+-- trzeba bylo recznie poprawiac ten plik za kazdym razem), pytamy GitHub
+-- API o NAJNOWSZY release i szukamy w nim assetu o dokladnie podanej
+-- nazwie. To samo API co poprawiony hook heroic-games-launcher; jesli
+-- host przekazal GITHUB_TOKEN do srodowiska, korzystamy z niego (wyzszy
+-- limit zapytan), ale dzialamy poprawnie rowniez bez niego.
+local function latest_release_asset_url(repo, asset_name)
+    local auth = ""
+    local token = os.getenv("GITHUB_TOKEN")
+    if token and token ~= "" then
+        auth = "-H " .. quote("Authorization: Bearer " .. token) .. " "
+    end
+    local api_url = "https://api.github.com/repos/" .. repo .. "/releases/latest"
+    local cmd = "curl -fsS " .. auth .. quote(api_url) ..
+        " | jq -r " .. quote('.assets[]? | select(.name == "' .. asset_name .. '") | .browser_download_url')
+    local handle = io.popen(cmd)
+    local url = handle and handle:read("*l") or nil
+    if handle then handle:close() end
+    if url == nil or url == "" or url == "null" then
+        io.stderr:write("Błąd: nie udało się znaleźć assetu '" .. asset_name ..
+            "' w najnowszym releasie " .. repo .. " (zapytanie do " .. api_url .. ")\n")
+        os.exit(1)
+    end
+    return url
+end
+
 -- Katalogi docelowe
 local BLUE_DIR       = "config/includes.chroot_after_packages/usr/share/Blue-Environment"
 local WALLPAPER_DIR  = "config/includes.chroot_after_packages/usr/share/wallpapers"
@@ -31,7 +58,7 @@ local BIN_DIR        = "config/includes.chroot_after_packages/usr/bin"
 -- w miejsca releasów bez tej ścieżki i wywalało build), pobieramy każdą
 -- binarkę osobno, bezpośrednio z jej właściwego, konkretnego releasu.
 local BLUE_ENV_URL   = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.6/blue-environment"
-local HACKEROS_COMP_URL = "https://github.com/HackerOS-Linux-System/HackerOS-Comp/releases/download/v0.2/hackeros-comp"
+local HACKEROS_COMP_URL = latest_release_asset_url("HackerOS-Linux-System/HackerOS-Comp", "hackeros-comp")
 local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.0.1"
 
 -- Raw URL (blob/tree nie nadają się do pobierania bezpośrednio)
