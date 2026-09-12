@@ -16,12 +16,49 @@ done
 echo "=== Pobieranie najnowszej wersji Heroic Games Launcher ==="
 REPO="Heroic-Games-Launcher/HeroicGamesLauncher"
 
-# Pobranie URL najnowszego pliku .deb dla architektury amd64 z API GitHub
-URL=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" \
-  | jq -r '.assets[] | select(.name | endswith(".deb")) | select(.name | contains("amd64") or contains("x86_64")) | .browser_download_url' | head -n 1)
+# POPRAWKA BLEDU: nieautoryzowane zapytania do api.github.com maja limit
+# 60/h NA ADRES IP -- przy wielu edycjach budowanych rownolegle z tych
+# samych runnerow GitHub Actions ten limit potrafi zostac wyczerpany, API
+# zwraca wtedy JSON bledu (bez klucza "assets"), a "jq -r '.assets[]...'"
+# wywala sie z "Cannot iterate over null (null)", przerywajac caly build.
+# Jesli host przekazal token do srodowiska chroota (np. GITHUB_TOKEN),
+# uzywamy go do autoryzacji (5000 zapytan/h zamiast 60) -- ale dzialamy
+# poprawnie rowniez bez niego. Dodatkowo: retry z odczekaniem na
+# przejsciowe bledy sieci/rate-limit, oraz czytelny komunikat z surowa
+# odpowiedzia API gdy naprawde sie nie uda (zamiast suchego bledu jq).
+AUTH_HEADER=""
+if [ -n "$GITHUB_TOKEN" ]; then
+  AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"
+fi
+
+API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+API_RESPONSE=""
+URL=""
+attempt=1
+max_attempts=5
+while [ "$attempt" -le "$max_attempts" ]; do
+  if [ -n "$AUTH_HEADER" ]; then
+    API_RESPONSE=$(curl -fsS -H "$AUTH_HEADER" "$API_URL" 2>/tmp/heroic-api-err.txt) && break
+  else
+    API_RESPONSE=$(curl -fsS "$API_URL" 2>/tmp/heroic-api-err.txt) && break
+  fi
+  echo "Próba $attempt/$max_attempts pobrania danych z GitHub API nie powiodła się, ponawiam za 10s..."
+  attempt=$((attempt + 1))
+  sleep 10
+done
+
+if [ -z "$API_RESPONSE" ]; then
+  echo "Błąd: nie udało się pobrać danych z $API_URL po $max_attempts próbach."
+  echo "Ostatni błąd curl:"
+  cat /tmp/heroic-api-err.txt 2>/dev/null
+  exit 1
+fi
+
+URL=$(printf '%s' "$API_RESPONSE"   | jq -r '.assets[]? | select(.name | endswith(".deb")) | select(.name | contains("amd64") or contains("x86_64")) | .browser_download_url' | head -n 1)
 
 if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-  echo "Błąd: Nie udało się odnaleźć pliku .deb na GitHubie."
+  echo "Błąd: Nie udało się odnaleźć pliku .deb na GitHubie. Surowa odpowiedź API:"
+  printf '%s\n' "$API_RESPONSE" | head -c 2000
   exit 1
 fi
 
