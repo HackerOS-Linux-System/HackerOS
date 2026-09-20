@@ -1,0 +1,18 @@
+[general]
+-> greeter_path   => "/usr/bin/hdm-greeter"
+-> vt             => 1
+-> theme          => blue
+-> background     => ""
+-> show_user_list => true
+-> allow_root     => false
+-> allow_guest    => false
+-> minimum_uid    => 1000
+-> maximum_uid    => 65533
+-> clock_format   => "%H:%M"
+-> sessions_dir   => ["/usr/share/wayland-sessions", "/usr/share/xsessions""]
+
+[power]
+-> shutdown  => "shutdown -h now"
+-> reboot    => reboot
+-> suspend   => "systemctl suspend"
+-> hibernate => "systemctl hibernate"
