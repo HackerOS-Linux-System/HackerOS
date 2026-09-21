@@ -1,10 +1,10 @@
 [Unit]
-Description=Start HDM Script
+Description=Start HDM
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/starthdm
+ExecStart=cage /usr/bin/hdm
 Restart=on-failure
 
 [Install]
