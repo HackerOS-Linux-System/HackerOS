@@ -1,0 +1,142 @@
+<?xml version="1.0"?>
+<!--
+  Blue Environment — labwc configuration (generated default)
+
+  Used when Blue Environment runs on the labwc backend
+  (~/.config/Blue-Environment/config.hk  →  [backend] compositor => labwc).
+  Blue Environment only generates this file when it does not exist yet, so
+  edit it freely — it will never be overwritten. Delete it to get a fresh
+  default back. Reload with:  labwc -r
+
+  Every "blue-environment ctl <cmd>" line below (the real flag is dash-dash-ctl) talks to
+  the running Blue shell, so global shortcuts keep working even while a
+  native (external) app has focus.
+-->
+<labwc_config>
+
+  <core>
+    <decoration>server</decoration>
+    <gap>0</gap>
+    <adaptiveSync>no</adaptiveSync>
+    <reuseOutputMode>no</reuseOutputMode>
+  </core>
+
+  <placement>
+    <policy>automatic</policy>
+  </placement>
+
+  <!-- Window chrome: matches Blue Environment's own windows
+       (see themes/Blue-Environment/labwc/themerc) so native apps look at
+       home next to built-in ones. -->
+  <theme>
+    <name>Blue-Environment</name>
+    <cornerRadius>12</cornerRadius>
+    <keepBorder>yes</keepBorder>
+    <dropShadows>yes</dropShadows>
+    <titlebar>
+      <layout>icon:iconify,max,close</layout>
+      <showTitle>yes</showTitle>
+    </titlebar>
+    <font place="ActiveWindow">
+      <name>Inter</name>
+      <size>10</size>
+    </font>
+    <font place="InactiveWindow">
+      <name>Inter</name>
+      <size>10</size>
+    </font>
+    <font place="MenuItem">
+      <name>Inter</name>
+      <size>10</size>
+    </font>
+    <font place="OnScreenDisplay">
+      <name>Inter</name>
+      <size>10</size>
+    </font>
+  </theme>
+
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+
+  <snapping>
+    <range inner="10" outer="10"/>
+    <topMaximize>yes</topMaximize>
+  </snapping>
+
+  <desktops>
+    <popupTime>800</popupTime>
+    <number>4</number>
+    <names>
+      <name>1</name>
+      <name>2</name>
+      <name>3</name>
+      <name>4</name>
+    </names>
+  </desktops>
+
+  <!-- Keeps native windows out from under the Blue top bar / dock. -->
+  <margin top="48" bottom="0" left="0" right="0"/>
+
+  <windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="no"/>
+
+  <windowRules>
+    <!-- The Blue shell itself: borderless, never in Alt-Tab and always behind
+         native windows (it is the desktop). It stays visible to the toplevel
+         protocol on purpose so Blue can give itself keyboard focus; the shell
+         filters itself out of its own window list. -->
+    <windowRule identifier="*blue*environment*" serverDecoration="no" skipWindowSwitcher="yes">
+      <action name="ToggleAlwaysOnBottom"/>
+    </windowRule>
+  </windowRules>
+
+  <keyboard>
+    <numlock>on</numlock>
+    <layoutScope>global</layoutScope>
+
+    <!-- Blue shell -->
+    <keybind key="W-space"><action name="Execute" command="blue-environment --ctl toggle-start-menu"/></keybind>
+    <keybind key="A-F1"><action name="Execute" command="blue-environment --ctl toggle-start-menu"/></keybind>
+    <keybind key="W-Tab"><action name="Execute" command="blue-environment --ctl fullscreen-menu"/></keybind>
+    <keybind key="C-A-c"><action name="Execute" command="blue-environment --ctl toggle-control-center"/></keybind>
+    <keybind key="C-S-v"><action name="Execute" command="blue-environment --ctl toggle-clipboard"/></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="blue-environment --ctl open-terminal"/></keybind>
+    <keybind key="Print"><action name="Execute" command="blue-environment --ctl screenshot"/></keybind>
+    <keybind key="W-l"><action name="Execute" command="blue-environment --ctl lock"/></keybind>
+    <keybind key="W-d"><action name="Execute" command="blue-environment --ctl show-desktop"/></keybind>
+
+    <!-- Native windows -->
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="A-S-Tab"><action name="PreviousWindow"/></keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="W-Up"><action name="ToggleMaximize"/></keybind>
+    <keybind key="W-Down"><action name="Iconify"/></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left"/></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
+    <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
+
+    <!-- Workspaces -->
+    <keybind key="W-1"><action name="GoToDesktop" to="1"/></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2"/></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3"/></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4"/></keybind>
+    <keybind key="W-S-1"><action name="SendToDesktop" to="1"/></keybind>
+    <keybind key="W-S-2"><action name="SendToDesktop" to="2"/></keybind>
+    <keybind key="W-S-3"><action name="SendToDesktop" to="3"/></keybind>
+    <keybind key="W-S-4"><action name="SendToDesktop" to="4"/></keybind>
+
+    <!-- Media keys -->
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="pactl set-sink-volume @DEFAULT_SINK@ +5%"/></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="pactl set-sink-volume @DEFAULT_SINK@ -5%"/></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute" command="pactl set-sink-mute @DEFAULT_SINK@ toggle"/></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="brightnessctl set +5%"/></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="brightnessctl set 5%-"/></keybind>
+  </keyboard>
+
+  <mouse>
+    <default/>
+  </mouse>
+
+</labwc_config>
