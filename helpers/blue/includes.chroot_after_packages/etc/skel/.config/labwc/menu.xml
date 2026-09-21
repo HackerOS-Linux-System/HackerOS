@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Blue Environment — labwc root (desktop right-click) menu -->
+<openbox_menu>
+  <menu id="root-menu">
+    <item label="Start menu">
+      <action name="Execute" command="blue-environment --ctl toggle-start-menu"/>
+    </item>
+    <item label="Terminal">
+      <action name="Execute" command="blue-environment --ctl open-terminal"/>
+    </item>
+    <item label="Control center">
+      <action name="Execute" command="blue-environment --ctl toggle-control-center"/>
+    </item>
+    <separator/>
+    <item label="Reload window manager">
+      <action name="Reconfigure"/>
+    </item>
+    <item label="Restart Blue shell">
+      <action name="Execute" command="blue-environment --ctl restart-shell"/>
+    </item>
+    <separator/>
+    <item label="Log out">
+      <action name="Exit"/>
+    </item>
+  </menu>
+</openbox_menu>
