@@ -83,11 +83,12 @@
   <windowSwitcher show="yes" preview="yes" outlines="yes" allWorkspaces="no"/>
 
   <windowRules>
-    <!-- The Blue shell itself: borderless, never in Alt-Tab and always behind
-         native windows (it is the desktop). It stays visible to the toplevel
-         protocol on purpose so Blue can give itself keyboard focus; the shell
+    <!-- The Blue shell itself: borderless and always behind native windows
+         (it is the desktop). It stays visible to the toplevel protocol and to
+         labwc's Alt+Tab on purpose: Blue can give itself keyboard focus, and
+         Alt+Tab from a native app can get back to Blue's windows. The shell
          filters itself out of its own window list. -->
-    <windowRule identifier="*blue*environment*" serverDecoration="no" skipWindowSwitcher="yes">
+    <windowRule identifier="*blue*environment*" serverDecoration="no">
       <action name="ToggleAlwaysOnBottom"/>
     </windowRule>
   </windowRules>
@@ -107,9 +108,30 @@
     <keybind key="W-l"><action name="Execute" command="blue-environment --ctl lock"/></keybind>
     <keybind key="W-d"><action name="Execute" command="blue-environment --ctl show-desktop"/></keybind>
 
+    <!-- Alt+Tab. Two kinds of windows exist: native apps (labwc's windows) and
+         Blue's own in-shell windows, which live inside the shell's single
+         window. labwc's built-in switcher only knows the former, and a bound
+         key never reaches the shell — so decide by who has focus:
+           * the Blue shell is focused  -> hand the key to Blue's own switcher
+             (it lists Blue windows AND native ones; Alt release commits);
+           * a native app is focused    -> labwc's switcher, which also lists
+             the "Blue Environment" entry so you can Alt+Tab back to Blue. -->
+    <keybind key="A-Tab">
+      <action name="If">
+        <query identifier="*blue*environment*"/>
+        <then><action name="Execute" command="blue-environment --ctl switcher-next"/></then>
+        <else><action name="NextWindow"/></else>
+      </action>
+    </keybind>
+    <keybind key="A-S-Tab">
+      <action name="If">
+        <query identifier="*blue*environment*"/>
+        <then><action name="Execute" command="blue-environment --ctl switcher-prev"/></then>
+        <else><action name="PreviousWindow"/></else>
+      </action>
+    </keybind>
+
     <!-- Native windows -->
-    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
-    <keybind key="A-S-Tab"><action name="PreviousWindow"/></keybind>
     <keybind key="A-F4"><action name="Close"/></keybind>
     <keybind key="W-Up"><action name="ToggleMaximize"/></keybind>
     <keybind key="W-Down"><action name="Iconify"/></keybind>
