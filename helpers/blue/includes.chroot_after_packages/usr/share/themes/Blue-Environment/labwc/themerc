@@ -1,0 +1,38 @@
+border.width: 1
+padding.width: 8
+padding.height: 8
+titlebar.height: 36
+
+window.active.border.color: #2957a4
+window.inactive.border.color: #272e3f
+
+window.active.title.bg.color: #1e293b
+window.inactive.title.bg.color: #1e293b
+
+window.active.label.text.color: #e2e8f0
+window.inactive.label.text.color: #64748b
+window.label.text.justify: left
+
+window.active.button.unpressed.image.color: #94a3b8
+window.inactive.button.unpressed.image.color: #475569
+window.active.button.close.unpressed.image.color: #f87171
+window.active.button.iconify.unpressed.image.color: #94a3b8
+window.active.button.max.unpressed.image.color: #94a3b8
+
+# Right-click desktop menu
+menu.items.bg.color: #0f172a
+menu.items.text.color: #cbd5e1
+menu.items.active.bg.color: #2563eb
+menu.items.active.text.color: #ffffff
+menu.items.padding.x: 12
+menu.items.padding.y: 8
+menu.separator.color: #334155
+menu.width.min: 180
+
+# Alt-Tab switcher, workspace popup
+osd.bg.color: #0f172a
+osd.border.color: #3b82f6
+osd.border.width: 1
+osd.label.text.color: #e2e8f0
+osd.window-switcher.item.active.border.width: 2
+osd.window-switcher.padding: 8
