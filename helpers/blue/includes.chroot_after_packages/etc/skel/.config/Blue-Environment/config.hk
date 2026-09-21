@@ -1,0 +1,4 @@
+[backend]
+-> compositor => labwc
+-> labwc_binary => labwc
+-> generate_labwc_config => true
