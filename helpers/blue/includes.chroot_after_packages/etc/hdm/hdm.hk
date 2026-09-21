@@ -5,11 +5,18 @@
 -> background     => ""
 -> show_user_list => true
 -> allow_root     => false
--> allow_guest    => false
 -> minimum_uid    => 1000
 -> maximum_uid    => 65533
 -> clock_format   => "%H:%M"
 -> sessions_dir   => ["/usr/share/wayland-sessions", "/usr/share/xsessions""]
+-> compositor     => cage
+
+[autologin]
+-> live_detect => true
+-> live_marker => ".config/Blue-Environment/.live"
+
+[default]
+-> session => blue-environment
 
 [power]
 -> shutdown  => "shutdown -h now"
