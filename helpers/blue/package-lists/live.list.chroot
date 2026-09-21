@@ -54,6 +54,8 @@ firmware-amd-graphics
 firmware-intel-graphics
 firmware-ti-connectivity
 firmware-zd1211
+firmware-samsung 
+firmware-ipw2x00
 gamemode
 lsb-release
 love
@@ -62,3 +64,9 @@ glow
 neowofetch
 cage
 labwc
+wl-clipboard
+grim
+slurp
+xwayland
+brightnessctl
+swaylock
