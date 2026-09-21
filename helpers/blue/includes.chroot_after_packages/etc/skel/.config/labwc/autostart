@@ -1,0 +1,22 @@
+#!/bin/sh
+# Blue Environment — labwc autostart (executed by labwc at session start).
+#
+# NOTE: the Blue shell itself is NOT started from here. `blue-environment`
+# starts labwc as `labwc -s "blue-environment --labwc-child"`, which is what
+# launches (and relaunches) the shell.
+
+# Make the Wayland session visible to systemd --user / D-Bus activated apps
+# (portals, file choosers, screen sharing, ...).
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+  dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP DISPLAY 2>/dev/null
+fi
+
+# Polkit agent (password prompts for pkexec / mounting etc.), if installed.
+for agent in /usr/libexec/polkit-gnome-authentication-agent-1 \
+             /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+             /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1; do
+  [ -x "$agent" ] && { "$agent" & break; }
+done
+
+# Idle / lock: uncomment if swayidle + swaylock are installed.
+# swayidle -w timeout 600 'swaylock -f' timeout 900 'wlopm --off "*"' resume 'wlopm --on "*"' &
