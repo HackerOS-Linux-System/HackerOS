@@ -7,6 +7,7 @@ QT_QPA_PLATFORM=wayland;xcb
 # Let labwc draw the (Blue-themed) title bars for Qt apps too
 QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 _JAVA_AWT_WM_NONREPARENTING=1
+XCURSOR_THEME=default
 XCURSOR_SIZE=24
 # Keyboard layout (change to taste, e.g. "pl", "de", "us"):
 XKB_DEFAULT_LAYOUT=pl
