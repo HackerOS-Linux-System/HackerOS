@@ -1,11 +1,38 @@
 [Unit]
-Description=Start HDM
-After=network.target
+Description=HDM — HackerOS Display Manager
+Documentation=https://github.com/HackerOS-Linux-System/HDM
+Conflicts=getty@tty1.service
+After=systemd-user-sessions.service getty@tty1.service plymouth-quit.service systemd-logind.service
+After=network-online.target
+Wants=network-online.target
+PartOf=graphical.target
 
 [Service]
 Type=simple
-ExecStart=cage /usr/bin/hdm
+ExecStart=/usr/bin/hdm
 Restart=on-failure
+RestartSec=1
+
+# hdm-daemon needs to read /etc/shadow and manage VT switching (see
+# daemon/src/vt.rs, which issues VT_ACTIVATE/VT_WAITACTIVE ioctls directly
+# on /dev/tty0) — both require root. This matches how gdm/sddm/lightdm run.
+User=root
+Group=root
+
+# HDM allocates and switches VTs itself via ioctl (see vt.rs) rather than
+# systemd binding it to a fixed tty, so no TTYPath=/dev/ttyN is set here —
+# doing so would fight with HDM's own VT_ACTIVATE calls.
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+# No systemd sandboxing directives (ProtectSystem=, ProtectHome=,
+# NoNewPrivileges=, etc.) are set here: HDM needs broad root access by
+# design — reading /etc/shadow, spawning arbitrary session binaries under
+# the logging-in user's UID, VT ioctls, and (for suspend/hibernate/reboot)
+# talking to systemd-logind. A locked-down profile for this unit would
+# need to be built and tested against HDM's actual syscall/path usage
+# rather than added speculatively here.
 
 [Install]
-WantedBy=multi-user.target
+Alias=display-manager.service
