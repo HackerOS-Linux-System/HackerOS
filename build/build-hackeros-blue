@@ -57,9 +57,9 @@ local BIN_DIR        = "config/includes.chroot_after_packages/usr/bin"
 -- POPRAWKA: zamiast pobierać jedno wspólne archiwum .tar.gz (które trafiało
 -- w miejsca releasów bez tej ścieżki i wywalało build), pobieramy każdą
 -- binarkę osobno, bezpośrednio z jej właściwego, konkretnego releasu.
-local BLUE_ENV_URL   = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.6/blue-environment"
+local BLUE_ENV_URL   = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.8/blue-environment"
 local HACKEROS_COMP_URL = latest_release_asset_url("HackerOS-Linux-System/HackerOS-Comp", "hackeros-comp")
-local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.0.1"
+local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.2"
 
 -- Raw URL (blob/tree nie nadają się do pobierania bezpośrednio)
 local WALLPAPER_URL = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/images/default.png"
