@@ -1,5 +1,4 @@
-#!/usr/bin/env hl
-/// blue — narzędzie zarządzania Blue Environment
+#!/usr/bin/hl
 using <gen 2>
 
 // curl
