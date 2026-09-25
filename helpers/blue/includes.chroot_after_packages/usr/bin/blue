@@ -1,1 +1,215 @@
+#!/usr/bin/env hl
+/// blue — narzędzie zarządzania Blue Environment
+using <gen 2>
 
+// curl
+# <main/colors>
+
+% BLUE_DIR: str     = /usr/share/Blue-Environment
+% BLUE_BIN: str     = /usr/share/Blue-Environment/blue-environment
+% VERSION_FILE: str = /usr/share/Blue-Environment/.version
+% REMOTE_VERSION_URL: str = https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/config/version.hacker
+% RELEASE_BASE: str = https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download
+
+;; ============================================================
+;;  FUNKCJE
+;; ============================================================
+
+: help def
+    ~> 
+    ::cyan blue — narzędzie Blue Environment
+    ~> 
+    ~> Użycie:
+    ~>   blue start                  Uruchamia Blue Environment
+    ~>   blue update                 Sprawdza i aktualizuje Blue Environment
+    ~>   blue refresh                Odświeża / restartuje środowisko
+    ~>   blue kill                   Zatrzymuje Blue Environment (placeholder)
+    ~> 
+    ~>   blue plugins install        Instaluje plugin (placeholder)
+    ~>   blue plugins remove         Usuwa plugin (placeholder)
+    ~>   blue plugins update         Aktualizuje pluginy (placeholder)
+    ~> 
+    ~>   blue themes install         Instaluje motyw (placeholder)
+    ~>   blue themes remove          Usuwa motyw (placeholder)
+    ~>   blue themes update          Aktualizuje motywy (placeholder)
+    ~> 
+    ~>   blue help                   Pokazuje tę pomoc
+    ~> 
+done
+
+: get_local_version def
+    ::exists @VERSION_FILE
+    ? ok
+        > cat @VERSION_FILE |> @local_ver
+        ::trim @local_ver -> @local_ver
+    done
+    ? err
+        % local_ver: str = 0.0
+    done
+done
+
+: get_remote_version def
+    ~> Pobieram informacje o najnowszej wersji...
+    > curl -fsSL @REMOTE_VERSION_URL |> @raw
+    ? err
+        ::red Błąd: nie udało się pobrać version.hacker
+        % remote_ver: str = 
+        done
+    done
+
+    ;; version.hacker wygląda tak:
+    ;; [
+    ;;   0.7
+    ;; ]
+    > echo "@raw" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 |> @remote_ver
+    ::trim @remote_ver -> @remote_ver
+done
+
+: do_update def
+    -- get_local_version
+    -- get_remote_version
+
+    ? @remote_ver == 
+        ::red Anulowano aktualizację (brak wersji zdalnej).
+        done
+    done
+
+    ~> Lokalna wersja:  @local_ver
+    ~> Zdalna wersja:   @remote_ver
+
+    ? @local_ver == @remote_ver
+        ::green Blue Environment jest już w najnowszej wersji (@local_ver).
+        done
+    done
+
+    ::yellow Znaleziono nową wersję: @remote_ver
+    ~> Rozpoczynam aktualizację...
+
+    % download_url: str = @RELEASE_BASE/v@remote_ver/blue-environment
+    % tmp_bin: str = /tmp/blue-environment-@remote_ver
+
+    ~> Pobieram binarkę: @download_url
+    > curl -fL --progress-bar -o @tmp_bin @download_url
+    ? err
+        ::red Błąd pobierania binarki.
+        done
+    done
+
+    ::exists @tmp_bin
+    ? err
+        ::red Pobrany plik nie istnieje.
+        done
+    done
+
+    ~> Zatrzymuję starą binarkę (jeśli działa)...
+    > pkill -f blue-environment || true
+
+    ~> Usuwam starą binarkę...
+    ^> rm -f @BLUE_BIN
+
+    ~> Instaluję nową binarkę...
+    ^> mv @tmp_bin @BLUE_BIN
+    ^> chmod +x @BLUE_BIN
+
+    ~> Aktualizuję plik .version...
+    ^> mkdir -p @BLUE_DIR
+    > echo @remote_ver | ^> tee @VERSION_FILE > /dev/null
+
+    ::green ✓ Blue Environment zaktualizowany do wersji @remote_ver
+done
+
+: do_start def
+    ::exists @BLUE_BIN
+    ? err
+        ::red Nie znaleziono binarki: @BLUE_BIN
+        ~> Spróbuj najpierw: blue update
+        done
+    done
+
+    ~> Uruchamiam Blue Environment...
+    & @BLUE_BIN
+    ~> PID: @_bg_pid
+    ::green Blue Environment uruchomiony.
+done
+
+: do_refresh def
+    ~> Odświeżam Blue Environment...
+    > pkill -f blue-environment || true
+    ::exists @BLUE_BIN
+    ? ok
+        & @BLUE_BIN
+        ~> PID: @_bg_pid
+        ::green Blue Environment odświeżony.
+    done
+    ? err
+        ::red Brak binarki — uruchom blue update.
+    done
+done
+
+: do_kill def
+    ::yellow blue kill — placeholder (jeszcze niezaimplementowane)
+    ~> Planowane: czyste zatrzymanie procesu Blue Environment.
+done
+
+: do_plugins def
+    % action: str = @arg2
+    ? switch @action
+    | install
+        ::yellow blue plugins install — placeholder
+    | remove
+        ::yellow blue plugins remove — placeholder
+    | update
+        ::yellow blue plugins update — placeholder
+    | *
+        ::red Nieznana podkomenda plugins. Użyj: install | remove | update
+    done
+done
+
+: do_themes def
+    % action: str = @arg2
+    ? switch @action
+    | install
+        ::yellow blue themes install — placeholder
+    | remove
+        ::yellow blue themes remove — placeholder
+    | update
+        ::yellow blue themes update — placeholder
+    | *
+        ::red Nieznana podkomenda themes. Użyj: install | remove | update
+    done
+done
+
+;; ============================================================
+;;  GŁÓWNA LOGIKA
+;; ============================================================
+
+% cmd: str = @arg1
+
+? @cmd == 
+    -- help
+    done
+done
+
+? switch @cmd
+| start
+    -- do_start
+| update
+    -- do_update
+| refresh
+    -- do_refresh
+| kill
+    -- do_kill
+| plugins
+    -- do_plugins
+| themes
+    -- do_themes
+| help
+    -- help
+| -h
+    -- help
+| --help
+    -- help
+| *
+    ::red Nieznana komenda: @cmd
+    -- help
+done
