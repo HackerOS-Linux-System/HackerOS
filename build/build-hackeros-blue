@@ -22,6 +22,18 @@ local function download(url, dest, allow_fail)
     sh("wget -q --show-progress -O " .. quote(dest) .. " " .. quote(url), allow_fail)
 end
 
+local function heading(text)
+    io.write("\n========================================================\n")
+    io.write("  " .. text .. "\n")
+    io.write("========================================================\n")
+end
+
+local function write_file(path, content)
+    local f = assert(io.open(path, "w"))
+    f:write(content)
+    f:close()
+end
+
 -- POPRAWKA BLEDU: zamiast trzymac tu na sztywno numer tagu releasu (co
 -- regularnie psulo sie przy kazdej nowej wersji hackeros-comp -- 404,
 -- trzeba bylo recznie poprawiac ten plik za kazdym razem), pytamy GitHub
@@ -49,6 +61,36 @@ local function latest_release_asset_url(repo, asset_name)
     return url
 end
 
+-- Skąd wziąć binarkę blue-environment - sterowane zmiennymi środowiskowymi
+-- (ustawianymi np. przez .github/workflows/build-blue.yml, patrz tam):
+--   BLUE_ENV_SOURCE  = "release" (domyślnie) albo "source"
+--   BLUE_ENV_VERSION = tag releasu do pobrania, gdy BLUE_ENV_SOURCE=release
+--                       ("latest" = najnowszy dostępny release, dynamicznie
+--                       przez GitHub API - tak jak HACKEROS_COMP_URL niżej;
+--                       domyślnie "v0.8", czyli dotychczasowe, na sztywno
+--                       przypięte zachowanie tego skryptu)
+--   BLUE_ENV_REF     = gałąź/tag/commit do zbudowania, gdy BLUE_ENV_SOURCE=source
+--                       (domyślnie "main")
+local BLUE_ENV_SOURCE  = (os.getenv("BLUE_ENV_SOURCE") or "release"):lower()
+local BLUE_ENV_VERSION = os.getenv("BLUE_ENV_VERSION") or "v0.8"
+local BLUE_ENV_REF     = os.getenv("BLUE_ENV_REF") or "main"
+local BLUE_ENVIRONMENT_REPO = "HackerOS-Linux-System/Blue-Environment"
+
+-- Domyślny display manager edycji Blue - "hdm" (HackerOS Display Manager,
+-- patrz helpers/blue/hooks/normal/hdm.hook.chrokt) albo "sddm" (patrz
+-- helpers/blue/hooks/normal/sddm-autologin.hook.chroot). Oba pakiety/binarki
+-- i tak trafiają do obrazu ISO niezależnie od tego wyboru (można ręcznie
+-- przełączyć się na drugi po zainstalowaniu/uruchomieniu systemu) - ten
+-- wybór decyduje WYŁĄCZNIE o tym, który z nich hooki włączą jako faktyczny
+-- domyślny display-manager przy starcie systemu (patrz niżej: plik-znacznik
+-- /etc/hackeros/blue-default-dm, odczytywany przez oba hooki).
+local BLUE_DEFAULT_DM = (os.getenv("BLUE_DEFAULT_DM") or "sddm"):lower()
+if BLUE_DEFAULT_DM ~= "hdm" and BLUE_DEFAULT_DM ~= "sddm" then
+    io.stderr:write("Błąd: nieznana wartość BLUE_DEFAULT_DM: '" .. BLUE_DEFAULT_DM ..
+        "' (oczekiwano 'hdm' albo 'sddm')\n")
+    os.exit(1)
+end
+
 -- Katalogi docelowe
 local BLUE_DIR       = "config/includes.chroot_after_packages/usr/share/Blue-Environment"
 local WALLPAPER_DIR  = "config/includes.chroot_after_packages/usr/share/wallpapers"
@@ -57,7 +99,6 @@ local BIN_DIR        = "config/includes.chroot_after_packages/usr/bin"
 -- POPRAWKA: zamiast pobierać jedno wspólne archiwum .tar.gz (które trafiało
 -- w miejsca releasów bez tej ścieżki i wywalało build), pobieramy każdą
 -- binarkę osobno, bezpośrednio z jej właściwego, konkretnego releasu.
-local BLUE_ENV_URL   = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download/v0.8/blue-environment"
 local HACKEROS_COMP_URL = latest_release_asset_url("HackerOS-Linux-System/HackerOS-Comp", "hackeros-comp")
 local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.2"
 
@@ -92,11 +133,91 @@ sh("mkdir -p " .. quote(WALLPAPER_DIR))
 sh("mkdir -p " .. quote(BIN_DIR))
 
 --------------------------------------------------------------------------
--- 3. Pobieramy binarkę blue-environment do /usr/share/Blue-Environment
+-- 2a. Zapisujemy wybrany domyślny display manager do pliku-znacznika,
+--     który hdm.hook.chrokt oraz sddm-autologin.hook.chroot odczytują
+--     w chroocie przy starcie systemu (patrz BLUE_DEFAULT_DM wyżej).
+--------------------------------------------------------------------------
+do
+    local marker_dir = "config/includes.chroot_after_packages/etc/hackeros"
+    sh("mkdir -p " .. quote(marker_dir))
+    write_file(marker_dir .. "/blue-default-dm", BLUE_DEFAULT_DM .. "\n")
+    heading("Domyślny display manager edycji Blue: " .. BLUE_DEFAULT_DM)
+end
+
+--------------------------------------------------------------------------
+-- FUNKCJE: pozyskanie binarki blue-environment (source vs release)
+--------------------------------------------------------------------------
+
+-- Buduje blue-environment ze źródeł (git clone + npm + cargo/Tauri) i
+-- kopiuje gotową binarkę do "dest". Wymaga npm/node oraz Rust/cargo (plus
+-- systemowych nagłówków webkit2gtk/Tauri) już zainstalowanych na
+-- runnerze/hoście - patrz .github/workflows/build-blue.yml, który
+-- instaluje je WYŁĄCZNIE gdy wybrano tryb "source".
+local function build_blue_environment_from_source(dest)
+    heading("Budowanie blue-environment ze źródeł (ref: " .. BLUE_ENV_REF .. ")")
+
+    local src = "/tmp/blue-environment-src"
+    sh("rm -rf " .. quote(src))
+    -- "--no-checkout" + "git fetch"/"git checkout FETCH_HEAD" zamiast
+    -- "git clone --branch", żeby BLUE_ENV_REF mogło być zarówno gałęzią,
+    -- tagiem, jak i "gołym" (surowym) SHA commita.
+    sh("git clone --no-checkout https://github.com/" .. BLUE_ENVIRONMENT_REPO .. ".git " .. quote(src))
+    sh("cd " .. quote(src) .. " && git fetch --depth 1 origin " .. quote(BLUE_ENV_REF) ..
+        " && git checkout FETCH_HEAD")
+
+    sh("cd " .. quote(src) .. " && npm install")
+
+    -- Mirror "beforeBuildCommand" z tauri.conf.json tego repo (npm run
+    -- build:tauri i tak to robi, ale kopiujemy jawnie na wypadek, gdyby
+    -- danej wersji tego brakowało).
+    sh("mkdir -p " .. quote(src .. "/src-tauri/icons"))
+    sh("cp " .. quote(src .. "/images/icon.png") .. " " .. quote(src .. "/src-tauri/icons/icon.png"), true)
+
+    sh("cd " .. quote(src) .. " && npm run build:tauri")
+
+    -- Binarka ląduje w target/ w KORZENIU workspace'a (src-tauri jest
+    -- członkiem głównego Cargo.toml [workspace]), NIE w src-tauri/target -
+    -- patrz analogiczny komentarz w .github/workflows/build.yml repo
+    -- Blue-Environment.
+    local built_bin = src .. "/target/release/blue-environment"
+    sh("test -f " .. quote(built_bin) .. " || (echo 'Błąd: nie znaleziono " ..
+        built_bin .. " po npm run build:tauri' >&2 && exit 1)")
+
+    sh("cp " .. quote(built_bin) .. " " .. quote(dest))
+end
+
+-- Pobiera gotową binarkę blue-environment z GitHub Releases i zapisuje ją
+-- do "dest". BLUE_ENV_VERSION == "latest" pyta GitHub API o najnowszy
+-- release (jak HACKEROS_COMP_URL powyżej); w przeciwnym razie pobiera z
+-- konkretnego, wskazanego tagu (domyślnie "v0.8" - dotychczasowe
+-- zachowanie tego skryptu, sprzed dodania wyboru source/release).
+local function download_blue_environment_release(dest)
+    local url
+    if BLUE_ENV_VERSION == "latest" then
+        url = latest_release_asset_url(BLUE_ENVIRONMENT_REPO, "blue-environment")
+    else
+        url = "https://github.com/" .. BLUE_ENVIRONMENT_REPO ..
+            "/releases/download/" .. BLUE_ENV_VERSION .. "/blue-environment"
+    end
+    heading("Pobieranie blue-environment z GitHub Releases (" .. BLUE_ENV_VERSION .. ")")
+    download(url, dest)
+end
+
+--------------------------------------------------------------------------
+-- 3. Pozyskujemy binarkę blue-environment do /usr/share/Blue-Environment
+--    (source albo release - patrz BLUE_ENV_SOURCE na górze pliku)
 --------------------------------------------------------------------------
 do
     local dest = BLUE_DIR .. "/blue-environment"
-    download(BLUE_ENV_URL, dest)
+    if BLUE_ENV_SOURCE == "source" then
+        build_blue_environment_from_source(dest)
+    elseif BLUE_ENV_SOURCE == "release" then
+        download_blue_environment_release(dest)
+    else
+        io.stderr:write("Błąd: nieznana wartość BLUE_ENV_SOURCE: '" .. BLUE_ENV_SOURCE ..
+            "' (oczekiwano 'source' albo 'release')\n")
+        os.exit(1)
+    end
     sh("chmod a+x " .. quote(dest))
 end
 
