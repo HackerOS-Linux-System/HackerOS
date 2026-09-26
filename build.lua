@@ -304,6 +304,16 @@ local EDITIONS = {
         placeholder  = false,
         pre_build    = "container",
     },
+    -- Edycja Server: na razie placeholder (bez własnego build_script ani
+    -- pre_build) - katalog helpers/server istnieje już w repo (patrz
+    -- helpers/server/package-lists/live.list.chroot), ale dedykowana
+    -- logika (własny build/build-hackeros-server, kopiowanie
+    -- helpers/server do config/ itd.) zostanie dodana w przyszłości.
+    -- Do tego czasu --server zachowuje się jak build domyślny (z
+    -- ostrzeżeniem w logu - patrz step_run_build).
+    server = {
+        placeholder = true,
+    },
 }
 
 local function print_help()
@@ -330,6 +340,8 @@ Dostępne flagi edycji (można podać tylko jedną naraz):
   --container                 Kontener roboczy HackerOS-Builder (helpers/container,
                               build/build-hackeros-container, budowany przez
                               "hackeros-builder build container" zamiast live-build/ISO)
+  --server                   Edycja Server (helpers/server) - PLACEHOLDER,
+                              obecnie zachowuje się jak build domyślny
   --help                     Wyświetla tę pomoc
 
 ]])
