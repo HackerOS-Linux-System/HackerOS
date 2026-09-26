@@ -1,231 +1,286 @@
 name: Build HackerOS Blue
-# Osobny, samodzielny workflow do pozyskania samej binarki Blue Environment
-# (repo HackerOS-Linux-System/Blue-Environment) -- NIE buduje calego ISO
-# edycji Blue (od tego jest .github/workflows/build.yml -> build.lua --blue
-# -> build/build-hackeros-blue, ktory i tak zawsze POBIERA gotowa binarke
-# z GitHub Releases, na sztywno przypietej do tagu v0.8 -- patrz stala
-# BLUE_ENV_URL w tamtym pliku).
+# Osobny workflow budujący WYŁĄCZNIE edycję "blue" (dokładnie to samo, co
+# .github/workflows/build.yml robi dla matrix.edition == "blue" -
+# checkout -> Lua 5.5 ze źródeł -> live-build ze źródeł -> `lua5.5
+# build.lua --blue` -> zmiana nazwy ISO -> sumy kontrolne -> artefakt),
+# ale z DODATKOWYM wyborem:
 #
-# Ten workflow sluzy do:
-#   - sprawdzenia, czy Blue Environment w ogole nadal daje sie zbudowac ze
-#     zrodel (npm + cargo/Tauri), zanim ktos zaktualizuje BLUE_ENV_URL /
-#     v0.8 w build/build-hackeros-blue na nowszy tag,
-#   - recznego zbudowania swiezej binarki z konkretnego brancha/commita
-#     (np. do testow przed wydaniem nowego tagu),
-#   - pobrania i zweryfikowania (sumy kontrolne) gotowego assetu z GitHub
-#     Releases bez koniecznosci uruchamiania calego builda ISO.
+#   1) skąd ma pochodzić sama binarka blue-environment, którą
+#      `build/build-hackeros-blue` zapisuje pod
+#      config/includes.chroot_after_packages/usr/share/Blue-Environment/blue-environment
+#      (czyli /usr/share/Blue-Environment/blue-environment w gotowym ISO):
+#        - "release" (domyślnie) - pobranie gotowej binarki z GitHub Releases
+#          repozytorium HackerOS-Linux-System/Blue-Environment (jak dotychczas -
+#          patrz zmienna BLUE_ENV_VERSION niżej, domyślnie pinowana na "v0.8",
+#          albo "latest" dla najnowszego wydania);
+#        - "source" - `git clone` repozytorium Blue-Environment (gałąź/tag/commit
+#          z blue_env_ref) i zbudowanie go od zera (npm install + npm run
+#          build:tauri), dokładnie jak w .github/workflows/build.yml repo
+#          Blue-Environment.
 #
-# Analogiczny wzorzec wyboru "source vs. release" jest juz uzyty w
-# .github/workflows/build-container.yml dla hackeros_builder_source
-# (source / latest-release / specific-release) -- ponizej to samo, tylko
-# dla stosu npm + cargo/Tauri (Blue Environment) zamiast czystego Go
-# (HackerOS-Builder).
+#   2) który display manager ma być domyślny (autostartowany na starcie
+#      systemu): "sddm" (domyślnie, z autologinem - patrz
+#      helpers/blue/hooks/normal/sddm-autologin.hook.chroot) albo "hdm"
+#      (HackerOS Display Manager - patrz helpers/blue/hooks/normal/hdm.hook.chrokt).
+#      Oba menedżery i tak trafiają do obrazu ISO niezależnie od tego
+#      wyboru - decyduje on wyłącznie, który z nich zostanie WŁĄCZONY
+#      jako aktywny przy starcie (patrz plik-znacznik
+#      /etc/hackeros/blue-default-dm, zapisywany przez
+#      build/build-hackeros-blue i odczytywany przez oba hooki).
+#
+# Oba wybory trafiają do build/build-hackeros-blue przez zmienne
+# środowiskowe BLUE_ENV_SOURCE / BLUE_ENV_VERSION / BLUE_ENV_REF oraz
+# BLUE_DEFAULT_DM - patrz ten skrypt, sekcje na jego początku.
 on:
   workflow_dispatch:
     inputs:
-      blue_source:
+      blue_env_source:
         description: >-
-          Skad wziac Blue Environment. "source" = git clone repozytorium
-          Blue-Environment i zbudowanie go od zera (npm install + npm run
-          build:tauri, dokladnie jak w .github/workflows/build.yml TEGO
-          repo -- zawsze aktualne, ale wolniejsze i wymaga zaleznosci
-          systemowych webkit2gtk/Tauri). "latest-release" / "specific-release"
-          = pobranie gotowej binarki "blue-environment" z GitHub Releases
-          repo Blue-Environment (szybciej; wymaga, zeby dane wydanie
-          faktycznie publikowalo taki asset).
+          Skad wziac binarke blue-environment. "release" = pobranie
+          gotowej binarki z GitHub Releases repo Blue-Environment
+          (szybciej). "source" = git clone + zbudowanie od zera (npm
+          install + npm run build:tauri) - wolniej, ale zawsze z
+          najswiezszych zrodel wskazanego brancha/commita.
         required: true
-        default: "latest-release"
+        default: "release"
         type: choice
         options:
+          - release
           - source
-          - latest-release
-          - specific-release
-      blue_version:
+      blue_env_version:
         description: >-
-          Tag wydania Blue Environment do pobrania (np. "v0.8") -- UZYWANE
-          WYLACZNIE gdy powyzej wybrano "specific-release". Ignorowane dla
-          "source" i "latest-release".
+          Tag wydania Blue Environment do pobrania (np. "v0.8", albo
+          "latest" dla najnowszego) - UZYWANE WYLACZNIE gdy powyzej
+          wybrano blue_env_source=release. Ignorowane dla "source".
         required: false
-        default: ""
+        default: "v0.8"
         type: string
-      blue_ref:
+      blue_env_ref:
         description: >-
           Galaz / tag / commit SHA repozytorium Blue-Environment do
-          zbudowania -- UZYWANE WYLACZNIE gdy wybrano "source". Ignorowane
-          dla obu trybow "*-release".
+          zbudowania - UZYWANE WYLACZNIE gdy wybrano
+          blue_env_source=source. Ignorowane dla "release".
         required: false
         default: "main"
         type: string
+      blue_default_dm:
+        description: >-
+          Domyslny display manager edycji Blue. "sddm" (domyslnie) -
+          logowanie graficzne przez SDDM z autologinem (patrz
+          helpers/blue/hooks/normal/sddm-autologin.hook.chroot). "hdm" -
+          logowanie przez HDM, czyli HackerOS Display Manager (patrz
+          helpers/blue/hooks/normal/hdm.hook.chrokt). Oba menedzery i tak
+          trafiaja do obrazu ISO niezaleznie od wyboru - mozna recznie
+          przelaczyc sie na drugi po starcie systemu ("systemctl enable
+          sddm.service" / "systemctl enable starthdm.service").
+        required: true
+        default: "sddm"
+        type: choice
+        options:
+          - sddm
+          - hdm
 env:
-  BLUE_ENVIRONMENT_REPO: "HackerOS-Linux-System/Blue-Environment"
-# Tak samo jak w build-container.yml -- kolejne reczne uruchomienia tego
-# samego workflowa na tym samym ref anuluja poprzedni, juz nieaktualny run
-# zamiast piertrzyc sie w kolejce.
+  # Ta sama wersja Lua co w .github/workflows/build.yml (patrz identyczny
+  # komentarz tam) - Lua 5.5 nie ma jeszcze paczki w repozytoriach Ubuntu,
+  # wiec kompilujemy ja recznie.
+  LUA_VERSION: "5.5.0"
 concurrency:
   group: build-blue-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 360
     steps:
-      - name: Walidacja parametrow wejsciowych
+      - name: Checkout repozytorium
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Odczyt wersji z config.hk
+        id: version
         run: |
-          set -e
-          if [ "${{ inputs.blue_source }}" = "specific-release" ] && [ -z "${{ inputs.blue_version }}" ]; then
-            echo "Blad: blue_source=specific-release wymaga podania 'blue_version' (np. v0.8)." >&2
+          VERSION=$(awk -F'=>' '/version[[:space:]]*=>/ { gsub(/[[:space:]]/, "", $NF); print $NF }' config.hk | head -n1)
+          if [ -z "$VERSION" ]; then
+            echo "Nie udało się odczytać wersji z ./config.hk (oczekiwany format: 'version => X.Y' pod [metadata])" >&2
             exit 1
           fi
+          echo "Wersja odczytana z config.hk: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Aktualizacja listy pakietów
+        run: sudo apt-get update
+
+      - name: Instalacja podstawowych narzędzi
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            tar \
+            git \
+            curl \
+            ca-certificates \
+            build-essential \
+            make \
+            gcc \
+            libreadline-dev
+
+      - name: Instalacja Pythona 3.13 (deadsnakes PPA)
+        run: |
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update
+          sudo apt-get install -y python3.13 python3.13-venv python3.13-dev
+
+      - name: Budowa i instalacja Lua ${{ env.LUA_VERSION }} ze źródeł
+        run: |
+          curl -fL -o "lua-${LUA_VERSION}.tar.gz" \
+            "https://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz"
+          tar -xzf "lua-${LUA_VERSION}.tar.gz"
+          cd "lua-${LUA_VERSION}"
+          make linux -j"$(nproc)"
+          sudo make install
+          cd ..
+          # Patrz identyczny komentarz w .github/workflows/build.yml -
+          # tworzymy symlinki lua5.5/luac5.5, bo domyślny "make install"
+          # instaluje binarki bez numeru wersji.
+          sudo ln -sf "$(command -v lua)" /usr/local/bin/lua5.5
+          sudo ln -sf "$(command -v luac)" /usr/local/bin/luac5.5
+          hash -r
+          lua5.5 -v
+
+      - name: Instalacja live-build (najnowsza wersja ze źródeł Debian Live Team) i narzędzi do tworzenia obrazu ISO
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            debootstrap \
+            debian-archive-keyring \
+            squashfs-tools \
+            xorriso \
+            isolinux \
+            syslinux-common \
+            syslinux-efi \
+            dosfstools \
+            mtools \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            grub-efi-ia32-bin \
+            mtd-utils \
+            build-essential \
+            devscripts \
+            debhelper \
+            po4a
+          # Patrz identyczny komentarz w .github/workflows/build.yml -
+          # pakiet "live-build" z repozytoriów Ubuntu jest zbyt stary, więc
+          # budujemy najnowszą wersję ze źródeł Debian Live Team.
+          rm -rf /tmp/live-build-src
+          for attempt in 1 2 3 4 5; do
+            if git clone --depth 1 https://salsa.debian.org/live-team/live-build.git /tmp/live-build-src; then
+              break
+            fi
+            echo "Próba $attempt/5 klonowania live-build nie powiodła się, ponawiam za 15s..."
+            rm -rf /tmp/live-build-src
+            sleep 15
+            if [ "$attempt" = "5" ]; then
+              echo "Błąd: nie udało się sklonować live-build po 5 próbach."
+              exit 1
+            fi
+          done
+          cd /tmp/live-build-src
+          dpkg-buildpackage -b -uc -us
+          cd ..
+          sudo apt-get remove -y live-build || true
+          sudo dpkg -i live-build_*.deb
+          lb --version
 
       # ------------------------------------------------------------------
-      # Zaleznosci systemowe + Node/Rust -- POTRZEBNE WYLACZNIE dla trybu
-      # "source" (npm install / cargo build). Dla obu trybow "*-release"
-      # sciagamy juz gotowa, statyczna binarke, wiec te kroki sa pomijane
-      # (oszczedza to kilka minut na kazdym reczym uruchomieniu w trybie
-      # release).
+      # Zależności systemowe + Node/Rust -- POTRZEBNE WYŁĄCZNIE, gdy
+      # blue_env_source=source (npm install / npm run build:tauri wewnątrz
+      # build/build-hackeros-blue). Dla blue_env_source=release binarka
+      # jest po prostu pobierana z GitHub Releases, więc te kroki są
+      # pomijane (oszczędza to kilka-kilkanaście minut na każdym buildzie
+      # w trybie release, czyli domyślnym).
       # ------------------------------------------------------------------
-      - name: Instalacja zaleznosci systemowych (Tauri v2 Linux build deps)
-        if: inputs.blue_source == 'source'
+      - name: Instalacja zależności systemowych Tauri v2 (WYŁĄCZNIE blue_env_source=source)
+        if: inputs.blue_env_source == 'source'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libssl-dev pkg-config libudev-dev file
 
-      - name: Instalacja Node.js
-        if: inputs.blue_source == 'source'
+      - name: Instalacja Node.js (WYŁĄCZNIE blue_env_source=source)
+        if: inputs.blue_env_source == 'source'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Instalacja Rust
-        if: inputs.blue_source == 'source'
+      - name: Instalacja Rust (WYŁĄCZNIE blue_env_source=source)
+        if: inputs.blue_env_source == 'source'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Pozyskanie Blue Environment (zrodlo = ${{ inputs.blue_source }})
+      - name: Uruchomienie build.lua --blue
+        env:
+          BLUE_ENV_SOURCE: ${{ inputs.blue_env_source }}
+          BLUE_ENV_VERSION: ${{ inputs.blue_env_version }}
+          BLUE_ENV_REF: ${{ inputs.blue_env_ref }}
+          BLUE_DEFAULT_DM: ${{ inputs.blue_default_dm }}
         run: |
-          set -e
-          mkdir -p dist-blue
-          case "${{ inputs.blue_source || 'latest-release' }}" in
-            source)
-              # git clone (bez --branch, zeby dzialalo zarowno dla galezi/tagow,
-              # jak i dla "golego" (surowego) SHA commita) + checkout
-              # wskazanego ref.
-              rm -rf /tmp/blue-environment-src
-              git clone --no-checkout "https://github.com/${BLUE_ENVIRONMENT_REPO}.git" /tmp/blue-environment-src
-              cd /tmp/blue-environment-src
-              git fetch --depth 1 origin "${{ inputs.blue_ref || 'main' }}"
-              git checkout FETCH_HEAD
+          chmod +x build.lua
+          lua5.5 build.lua --blue
 
-              echo "npm install"
-              npm install
-
-              # Mirror tauri.conf.json's beforeBuildCommand -- npm run
-              # build:tauri robi to sam, ale kopiujemy jawnie na wypadek,
-              # gdyby danej wersji tego brakowalo.
-              mkdir -p src-tauri/icons
-              cp images/icon.png src-tauri/icons/icon.png 2>/dev/null || true
-
-              echo "npm run build:tauri (pelny bundle: .deb/.rpm/.AppImage + binarka)"
-              npm run build:tauri
-
-              # Binarka ladujuje w target/ w KORZENIU workspace'a (src-tauri
-              # jest czlonkiem glownego Cargo.toml [workspace]), NIE w
-              # src-tauri/target -- patrz komentarz w build.yml tego repo.
-              if [ ! -f target/release/blue-environment ]; then
-                echo "Blad: nie znaleziono target/release/blue-environment po 'npm run build:tauri'." >&2
-                exit 1
-              fi
-              cp target/release/blue-environment "$GITHUB_WORKSPACE/dist-blue/blue-environment"
-              cp images/icon.png "$GITHUB_WORKSPACE/dist-blue/icon.png" 2>/dev/null || true
-
-              # Kompozytor Wayland (compositor/) -- opcjonalny, tak samo jak
-              # w .github/workflows/test.yml tego repo (probe: "present?"),
-              # bo na dzien pisania tego workflowa jeszcze nie wszedl do drzewa.
-              if [ -f compositor/Cargo.toml ]; then
-                echo "compositor/Cargo.toml znaleziony - buduje kompozytor"
-                cargo build --release --manifest-path compositor/Cargo.toml
-                cp compositor/target/release/blue-compositor "$GITHUB_WORKSPACE/dist-blue/blue-compositor" 2>/dev/null || true
-              else
-                echo "compositor/Cargo.toml nie istnieje jeszcze w tym ref - pomijam kompozytor."
-              fi
-
-              # CLI "blue" (launcher/) -- rowniez opcjonalne/jeszcze
-              # nieobecne w niektorych ref (patrz build.hl: build_launcher_cli
-              # robi dokladnie to samo sprawdzenie przed skopiowaniem).
-              if [ -f launcher/blue ] && [ -f launcher/main.rb ]; then
-                echo "launcher/blue znaleziony - dolaczam CLI"
-                cp launcher/blue "$GITHUB_WORKSPACE/dist-blue/blue"
-                chmod 0755 "$GITHUB_WORKSPACE/dist-blue/blue"
-              else
-                echo "launcher/blue nie istnieje jeszcze w tym ref - pomijam CLI."
-              fi
-
-              # Gotowe paczki .deb/.rpm/.AppImage z bundlera Tauriego, jesli
-              # jakies powstaly (patrz "Collect bundle outputs" w build.yml
-              # tego repo).
-              mkdir -p "$GITHUB_WORKSPACE/dist-blue/bundle"
-              find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
-                -exec cp {} "$GITHUB_WORKSPACE/dist-blue/bundle/" \; 2>/dev/null || true
-              ;;
-
-            latest-release)
-              echo "Pobieranie najnowszego wydania Blue Environment z GitHub Releases..."
-              URL="https://github.com/${BLUE_ENVIRONMENT_REPO}/releases/latest/download/blue-environment"
-              if ! curl -fL -o dist-blue/blue-environment "$URL"; then
-                echo "Blad: nie udalo sie pobrac $URL" >&2
-                echo "Upewnij sie, ze repo ${BLUE_ENVIRONMENT_REPO} publikuje w najnowszym" >&2
-                echo "wydaniu asset o nazwie dokladnie 'blue-environment', albo uzyj" >&2
-                echo "blue_source=specific-release / blue_source=source." >&2
-                exit 1
-              fi
-              chmod +x dist-blue/blue-environment
-              ;;
-
-            specific-release)
-              VERSION_TAG="${{ inputs.blue_version }}"
-              echo "Pobieranie Blue Environment $VERSION_TAG z GitHub Releases..."
-              URL="https://github.com/${BLUE_ENVIRONMENT_REPO}/releases/download/${VERSION_TAG}/blue-environment"
-              if ! curl -fL -o dist-blue/blue-environment "$URL"; then
-                echo "Blad: nie udalo sie pobrac $URL" >&2
-                echo "Sprawdz, czy tag '$VERSION_TAG' istnieje i czy to wydanie" >&2
-                echo "publikuje asset o nazwie dokladnie 'blue-environment'." >&2
-                exit 1
-              fi
-              chmod +x dist-blue/blue-environment
-              ;;
-
-            *)
-              echo "Blad: nieznana wartosc blue_source: '${{ inputs.blue_source }}'" >&2
-              exit 1
-              ;;
-          esac
-
-      # Domyslna tapeta Blue Environment -- best-effort (jak w
-      # build/build-hackeros-blue: kosmetyczna, brak jej nie przerywa builda),
-      # niezaleznie od wybranego trybu powyzej.
-      - name: Pobranie domyslnej tapety (best-effort)
+      - name: Weryfikacja binarki blue-environment i wyboru display managera w drzewie ISO
         run: |
-          mkdir -p dist-blue/wallpapers
-          curl -fsSL -o dist-blue/wallpapers/default.png \
-            "https://raw.githubusercontent.com/${BLUE_ENVIRONMENT_REPO}/main/images/default.png" \
-            || echo "Ostrzezenie: nie udalo sie pobrac domyslnej tapety (pomijam, niekrytyczne)."
-
-      - name: Wygenerowanie sum kontrolnych binarki (SHA256 / SHA512)
-        run: |
-          cd dist-blue
-          if [ -f blue-environment ]; then
-            sha256sum blue-environment > blue-environment.sha256sum
-            sha512sum blue-environment > blue-environment.sha512sum
-            echo "--- blue-environment.sha256sum ---"
-            cat blue-environment.sha256sum
-          else
-            echo "Ostrzezenie: brak dist-blue/blue-environment - pomijam sumy kontrolne." >&2
+          BIN="config/includes.chroot_after_packages/usr/share/Blue-Environment/blue-environment"
+          if [ ! -x "$BIN" ]; then
+            echo "Błąd: $BIN nie istnieje albo nie ma bitu wykonywalnego po build.lua --blue." >&2
+            echo "(Ten plik ląduje jako /usr/share/Blue-Environment/blue-environment w gotowym ISO.)" >&2
+            exit 1
           fi
+          echo "OK: $BIN istnieje i jest wykonywalny (trafi do ISO jako /usr/share/Blue-Environment/blue-environment)."
+          file "$BIN" || true
 
-      - name: Wgranie Blue Environment jako artefaktu builda
+          DM_MARKER="config/includes.chroot_after_packages/etc/hackeros/blue-default-dm"
+          if [ ! -f "$DM_MARKER" ]; then
+            echo "Błąd: $DM_MARKER nie istnieje po build.lua --blue." >&2
+            exit 1
+          fi
+          DM_VALUE="$(cat "$DM_MARKER")"
+          if [ "$DM_VALUE" != "${{ inputs.blue_default_dm }}" ]; then
+            echo "Błąd: $DM_MARKER zawiera '$DM_VALUE', a oczekiwano '${{ inputs.blue_default_dm }}'." >&2
+            exit 1
+          fi
+          echo "OK: domyślny display manager = $DM_VALUE (plik-znacznik $DM_MARKER)."
+
+      - name: Wyszukanie zbudowanych obrazów ISO
+        id: find_iso
+        run: |
+          echo "iso_found=$(find . -maxdepth 3 -iname '*.iso' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Zmiana nazwy obrazu ISO
+        id: rename_iso
+        if: steps.find_iso.outputs.iso_found != ''
+        run: |
+          SRC="${{ steps.find_iso.outputs.iso_found }}"
+          DEST="HackerOS-V${{ steps.version.outputs.version }}-blue.iso"
+          mv -- "$SRC" "$DEST"
+          echo "Zmieniono nazwę: $SRC -> $DEST"
+          echo "iso_path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Wygenerowanie sum kontrolnych obrazu ISO (SHA256 / SHA512)
+        if: steps.find_iso.outputs.iso_found != ''
+        run: |
+          ISO="${{ steps.rename_iso.outputs.iso_path }}"
+          sha256sum "$ISO" > "${ISO}.sha256sum"
+          sha512sum "$ISO" > "${ISO}.sha512sum"
+          echo "--- ${ISO}.sha256sum ---"
+          cat "${ISO}.sha256sum"
+          echo "--- ${ISO}.sha512sum ---"
+          cat "${ISO}.sha512sum"
+
+      - name: Wgranie ISO jako artefaktu builda
+        if: steps.find_iso.outputs.iso_found != ''
         uses: actions/upload-artifact@v4
         with:
-          name: Blue-Environment-${{ inputs.blue_source }}-${{ inputs.blue_source == 'source' && inputs.blue_ref || inputs.blue_version || 'latest' }}
-          path: dist-blue/**
-          if-no-files-found: error
+          name: HackerOS-V${{ steps.version.outputs.version }}-blue-${{ inputs.blue_env_source }}-${{ inputs.blue_default_dm }}
+          path: |
+            ${{ steps.rename_iso.outputs.iso_path }}
+            ${{ steps.rename_iso.outputs.iso_path }}.sha256sum
+            ${{ steps.rename_iso.outputs.iso_path }}.sha512sum
+          if-no-files-found: warn
