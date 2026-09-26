@@ -1,0 +1,65 @@
+#!/bin/sh
+# =====================================================================
+# sddm-autologin.hook.chroot
+# =====================================================================
+#
+# Konfiguruje SDDM tak, aby na edycji Blue:
+#   1) odpalał się automatycznie na starcie systemu (odpowiednik
+#      "systemctl enable" wykonywanego zwykle przez postinst pakietu -
+#      w chroocie live-build nikt go za nas nie wywoła, więc robimy to
+#      jawnie, tak samo jak np. helpers/gaming/hooks/normal/setup-gaming.hook.chroot
+#      robi to dla hackeros-game-mode.service);
+#   2) logował użytkownika "user" automatycznie, bez pytania o hasło
+#      (patrz usr/lib/sddm/sddm.conf.d/autologin.conf, dostarczony razem
+#      z tym hookiem przez includes.chroot_after_packages - system Live
+#      i tak ma znane, jawne hasło "live" ustawiane w
+#      config/hooks/normal/user-setup.hook.chroot, więc pytanie o nie
+#      przy każdym starcie nie ma sensu).
+#
+# Sama sesja domyślna (Session=blue-environment w autologin.conf) oraz
+# uruchomienie polecenia "blue start" po zalogowaniu są już obsłużone
+# przez:
+#   - usr/share/wayland-sessions/blue-environment.desktop (sesja Wayland
+#     wybierana przez SDDM),
+#   - usr/lib/systemd/user/blue-start.service (+ jego włączenie przez
+#     usr/lib/systemd/user/graphical-session.target.wants/blue-start.service),
+#     który odpala "blue start" zaraz po wejściu sesji w
+#     graphical-session.target.
+#
+# UWAGA: edycja Blue ma też HDM (patrz helpers/blue/hooks/normal/hdm.hook.chrokt),
+# który dotychczas pełnił rolę menedżera logowania. Oba menedżery mają w
+# swoich jednostkach systemd "Alias=display-manager.service" - wygrywa
+# ten, którego "systemctl enable" wykonano jako ostatnie (czyli - po
+# nazwie pliku - ten hook, uruchamiany alfabetycznie po "hdm.hook.chrokt").
+# Jeśli docelowo ma zostać tylko jeden menedżer logowania, wystarczy
+# usunąć/zmienić odpowiedni hook.
+set -e
+
+echo "========================================================"
+echo "  HackerOS Blue: konfiguracja SDDM (autostart + autologin)..."
+echo "========================================================"
+
+# Nie pytaj interaktywnie (debconf) o domyślny menedżer logowania - w
+# chroocie live-build i tak nie ma z kim "porozmawiać", a bez tego apt
+# potrafi się zatrzymać w oczekiwaniu na odpowiedź.
+export DEBIAN_FRONTEND=noninteractive
+
+if command -v sddm >/dev/null 2>&1 || [ -x /usr/bin/sddm ]; then
+    echo "/usr/bin/sddm" > /etc/X11/default-display-manager
+    echo "sddm shared/default-x-display-manager select sddm" | debconf-set-selections || true
+else
+    echo "Ostrzeżenie: nie znaleziono /usr/bin/sddm - czy pakiet 'sddm' jest na" >&2
+    echo "liście helpers/blue/package-lists/live.list.chroot?" >&2
+fi
+
+systemctl daemon-reload
+
+if [ -f /usr/lib/systemd/system/sddm.service ] || [ -f /etc/systemd/system/sddm.service ]; then
+    systemctl enable sddm.service
+else
+    echo "Ostrzeżenie: /usr/lib/systemd/system/sddm.service nie istnieje - pomijam enable." >&2
+fi
+
+echo "========================================================"
+echo "  HackerOS Blue: SDDM skonfigurowany (autologin + blue start)."
+echo "========================================================"
