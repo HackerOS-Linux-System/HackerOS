@@ -1,1 +1,231 @@
+name: Build HackerOS Blue
+# Osobny, samodzielny workflow do pozyskania samej binarki Blue Environment
+# (repo HackerOS-Linux-System/Blue-Environment) -- NIE buduje calego ISO
+# edycji Blue (od tego jest .github/workflows/build.yml -> build.lua --blue
+# -> build/build-hackeros-blue, ktory i tak zawsze POBIERA gotowa binarke
+# z GitHub Releases, na sztywno przypietej do tagu v0.8 -- patrz stala
+# BLUE_ENV_URL w tamtym pliku).
+#
+# Ten workflow sluzy do:
+#   - sprawdzenia, czy Blue Environment w ogole nadal daje sie zbudowac ze
+#     zrodel (npm + cargo/Tauri), zanim ktos zaktualizuje BLUE_ENV_URL /
+#     v0.8 w build/build-hackeros-blue na nowszy tag,
+#   - recznego zbudowania swiezej binarki z konkretnego brancha/commita
+#     (np. do testow przed wydaniem nowego tagu),
+#   - pobrania i zweryfikowania (sumy kontrolne) gotowego assetu z GitHub
+#     Releases bez koniecznosci uruchamiania calego builda ISO.
+#
+# Analogiczny wzorzec wyboru "source vs. release" jest juz uzyty w
+# .github/workflows/build-container.yml dla hackeros_builder_source
+# (source / latest-release / specific-release) -- ponizej to samo, tylko
+# dla stosu npm + cargo/Tauri (Blue Environment) zamiast czystego Go
+# (HackerOS-Builder).
+on:
+  workflow_dispatch:
+    inputs:
+      blue_source:
+        description: >-
+          Skad wziac Blue Environment. "source" = git clone repozytorium
+          Blue-Environment i zbudowanie go od zera (npm install + npm run
+          build:tauri, dokladnie jak w .github/workflows/build.yml TEGO
+          repo -- zawsze aktualne, ale wolniejsze i wymaga zaleznosci
+          systemowych webkit2gtk/Tauri). "latest-release" / "specific-release"
+          = pobranie gotowej binarki "blue-environment" z GitHub Releases
+          repo Blue-Environment (szybciej; wymaga, zeby dane wydanie
+          faktycznie publikowalo taki asset).
+        required: true
+        default: "latest-release"
+        type: choice
+        options:
+          - source
+          - latest-release
+          - specific-release
+      blue_version:
+        description: >-
+          Tag wydania Blue Environment do pobrania (np. "v0.8") -- UZYWANE
+          WYLACZNIE gdy powyzej wybrano "specific-release". Ignorowane dla
+          "source" i "latest-release".
+        required: false
+        default: ""
+        type: string
+      blue_ref:
+        description: >-
+          Galaz / tag / commit SHA repozytorium Blue-Environment do
+          zbudowania -- UZYWANE WYLACZNIE gdy wybrano "source". Ignorowane
+          dla obu trybow "*-release".
+        required: false
+        default: "main"
+        type: string
+env:
+  BLUE_ENVIRONMENT_REPO: "HackerOS-Linux-System/Blue-Environment"
+# Tak samo jak w build-container.yml -- kolejne reczne uruchomienia tego
+# samego workflowa na tym samym ref anuluja poprzedni, juz nieaktualny run
+# zamiast piertrzyc sie w kolejce.
+concurrency:
+  group: build-blue-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Walidacja parametrow wejsciowych
+        run: |
+          set -e
+          if [ "${{ inputs.blue_source }}" = "specific-release" ] && [ -z "${{ inputs.blue_version }}" ]; then
+            echo "Blad: blue_source=specific-release wymaga podania 'blue_version' (np. v0.8)." >&2
+            exit 1
+          fi
 
+      # ------------------------------------------------------------------
+      # Zaleznosci systemowe + Node/Rust -- POTRZEBNE WYLACZNIE dla trybu
+      # "source" (npm install / cargo build). Dla obu trybow "*-release"
+      # sciagamy juz gotowa, statyczna binarke, wiec te kroki sa pomijane
+      # (oszczedza to kilka minut na kazdym reczym uruchomieniu w trybie
+      # release).
+      # ------------------------------------------------------------------
+      - name: Instalacja zaleznosci systemowych (Tauri v2 Linux build deps)
+        if: inputs.blue_source == 'source'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev pkg-config libudev-dev file
+
+      - name: Instalacja Node.js
+        if: inputs.blue_source == 'source'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalacja Rust
+        if: inputs.blue_source == 'source'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Pozyskanie Blue Environment (zrodlo = ${{ inputs.blue_source }})
+        run: |
+          set -e
+          mkdir -p dist-blue
+          case "${{ inputs.blue_source || 'latest-release' }}" in
+            source)
+              # git clone (bez --branch, zeby dzialalo zarowno dla galezi/tagow,
+              # jak i dla "golego" (surowego) SHA commita) + checkout
+              # wskazanego ref.
+              rm -rf /tmp/blue-environment-src
+              git clone --no-checkout "https://github.com/${BLUE_ENVIRONMENT_REPO}.git" /tmp/blue-environment-src
+              cd /tmp/blue-environment-src
+              git fetch --depth 1 origin "${{ inputs.blue_ref || 'main' }}"
+              git checkout FETCH_HEAD
+
+              echo "npm install"
+              npm install
+
+              # Mirror tauri.conf.json's beforeBuildCommand -- npm run
+              # build:tauri robi to sam, ale kopiujemy jawnie na wypadek,
+              # gdyby danej wersji tego brakowalo.
+              mkdir -p src-tauri/icons
+              cp images/icon.png src-tauri/icons/icon.png 2>/dev/null || true
+
+              echo "npm run build:tauri (pelny bundle: .deb/.rpm/.AppImage + binarka)"
+              npm run build:tauri
+
+              # Binarka ladujuje w target/ w KORZENIU workspace'a (src-tauri
+              # jest czlonkiem glownego Cargo.toml [workspace]), NIE w
+              # src-tauri/target -- patrz komentarz w build.yml tego repo.
+              if [ ! -f target/release/blue-environment ]; then
+                echo "Blad: nie znaleziono target/release/blue-environment po 'npm run build:tauri'." >&2
+                exit 1
+              fi
+              cp target/release/blue-environment "$GITHUB_WORKSPACE/dist-blue/blue-environment"
+              cp images/icon.png "$GITHUB_WORKSPACE/dist-blue/icon.png" 2>/dev/null || true
+
+              # Kompozytor Wayland (compositor/) -- opcjonalny, tak samo jak
+              # w .github/workflows/test.yml tego repo (probe: "present?"),
+              # bo na dzien pisania tego workflowa jeszcze nie wszedl do drzewa.
+              if [ -f compositor/Cargo.toml ]; then
+                echo "compositor/Cargo.toml znaleziony - buduje kompozytor"
+                cargo build --release --manifest-path compositor/Cargo.toml
+                cp compositor/target/release/blue-compositor "$GITHUB_WORKSPACE/dist-blue/blue-compositor" 2>/dev/null || true
+              else
+                echo "compositor/Cargo.toml nie istnieje jeszcze w tym ref - pomijam kompozytor."
+              fi
+
+              # CLI "blue" (launcher/) -- rowniez opcjonalne/jeszcze
+              # nieobecne w niektorych ref (patrz build.hl: build_launcher_cli
+              # robi dokladnie to samo sprawdzenie przed skopiowaniem).
+              if [ -f launcher/blue ] && [ -f launcher/main.rb ]; then
+                echo "launcher/blue znaleziony - dolaczam CLI"
+                cp launcher/blue "$GITHUB_WORKSPACE/dist-blue/blue"
+                chmod 0755 "$GITHUB_WORKSPACE/dist-blue/blue"
+              else
+                echo "launcher/blue nie istnieje jeszcze w tym ref - pomijam CLI."
+              fi
+
+              # Gotowe paczki .deb/.rpm/.AppImage z bundlera Tauriego, jesli
+              # jakies powstaly (patrz "Collect bundle outputs" w build.yml
+              # tego repo).
+              mkdir -p "$GITHUB_WORKSPACE/dist-blue/bundle"
+              find target/release/bundle -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) \
+                -exec cp {} "$GITHUB_WORKSPACE/dist-blue/bundle/" \; 2>/dev/null || true
+              ;;
+
+            latest-release)
+              echo "Pobieranie najnowszego wydania Blue Environment z GitHub Releases..."
+              URL="https://github.com/${BLUE_ENVIRONMENT_REPO}/releases/latest/download/blue-environment"
+              if ! curl -fL -o dist-blue/blue-environment "$URL"; then
+                echo "Blad: nie udalo sie pobrac $URL" >&2
+                echo "Upewnij sie, ze repo ${BLUE_ENVIRONMENT_REPO} publikuje w najnowszym" >&2
+                echo "wydaniu asset o nazwie dokladnie 'blue-environment', albo uzyj" >&2
+                echo "blue_source=specific-release / blue_source=source." >&2
+                exit 1
+              fi
+              chmod +x dist-blue/blue-environment
+              ;;
+
+            specific-release)
+              VERSION_TAG="${{ inputs.blue_version }}"
+              echo "Pobieranie Blue Environment $VERSION_TAG z GitHub Releases..."
+              URL="https://github.com/${BLUE_ENVIRONMENT_REPO}/releases/download/${VERSION_TAG}/blue-environment"
+              if ! curl -fL -o dist-blue/blue-environment "$URL"; then
+                echo "Blad: nie udalo sie pobrac $URL" >&2
+                echo "Sprawdz, czy tag '$VERSION_TAG' istnieje i czy to wydanie" >&2
+                echo "publikuje asset o nazwie dokladnie 'blue-environment'." >&2
+                exit 1
+              fi
+              chmod +x dist-blue/blue-environment
+              ;;
+
+            *)
+              echo "Blad: nieznana wartosc blue_source: '${{ inputs.blue_source }}'" >&2
+              exit 1
+              ;;
+          esac
+
+      # Domyslna tapeta Blue Environment -- best-effort (jak w
+      # build/build-hackeros-blue: kosmetyczna, brak jej nie przerywa builda),
+      # niezaleznie od wybranego trybu powyzej.
+      - name: Pobranie domyslnej tapety (best-effort)
+        run: |
+          mkdir -p dist-blue/wallpapers
+          curl -fsSL -o dist-blue/wallpapers/default.png \
+            "https://raw.githubusercontent.com/${BLUE_ENVIRONMENT_REPO}/main/images/default.png" \
+            || echo "Ostrzezenie: nie udalo sie pobrac domyslnej tapety (pomijam, niekrytyczne)."
+
+      - name: Wygenerowanie sum kontrolnych binarki (SHA256 / SHA512)
+        run: |
+          cd dist-blue
+          if [ -f blue-environment ]; then
+            sha256sum blue-environment > blue-environment.sha256sum
+            sha512sum blue-environment > blue-environment.sha512sum
+            echo "--- blue-environment.sha256sum ---"
+            cat blue-environment.sha256sum
+          else
+            echo "Ostrzezenie: brak dist-blue/blue-environment - pomijam sumy kontrolne." >&2
+          fi
+
+      - name: Wgranie Blue Environment jako artefaktu builda
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blue-Environment-${{ inputs.blue_source }}-${{ inputs.blue_source == 'source' && inputs.blue_ref || inputs.blue_version || 'latest' }}
+          path: dist-blue/**
+          if-no-files-found: error
