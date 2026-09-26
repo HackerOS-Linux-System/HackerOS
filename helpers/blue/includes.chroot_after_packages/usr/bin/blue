@@ -1,0 +1,229 @@
+#!/usr/bin/env lua
+
+-- Konfiguracja stałych
+local BLUE_DIR = "/usr/share/Blue-Environment"
+local BLUE_BIN = "/usr/share/Blue-Environment/blue-environment"
+local VERSION_FILE = "/usr/share/Blue-Environment/.version"
+local REMOTE_VERSION_URL = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/config/version.hacker"
+local RELEASE_BASE = "https://github.com/HackerOS-Linux-System/Blue-Environment/releases/download"
+
+-- Kolory ANSI
+local COLORS = {
+    reset   = "\27[0m",
+    red     = "\27[31m",
+    green   = "\27[32m",
+    yellow  = "\27[33m",
+    cyan    = "\27[36m"
+}
+
+local function print_color(color, text)
+    print((COLORS[color] or "") .. text .. COLORS.reset)
+end
+
+local function file_exists(path)
+    local f = io.open(path, "r")
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
+local function trim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+-- ============================================================
+--  FUNKCJE
+-- ============================================================
+
+local function help()
+    print_color("cyan", "blue — narzędzie Blue Environment")
+    print("")
+    print("  Użycie:")
+    print("    blue start                 Uruchamia Blue Environment")
+    print("    blue update                Sprawdza i aktualizuje Blue Environment")
+    print("    blue refresh               Odświeża / restartuje środowisko")
+    print("    blue kill                  Zatrzymuje Blue Environment (placeholder)")
+    print("")
+    print("    blue plugins install       Instaluje plugin (placeholder)")
+    print("    blue plugins remove        Usuwa plugin (placeholder)")
+    print("    blue plugins update        Aktualizuje pluginy (placeholder)")
+    print("")
+    print("    blue themes install        Instaluje motyw (placeholder)")
+    print("    blue themes remove         Usuwa motyw (placeholder)")
+    print("    blue themes update         Aktualizuje motywy (placeholder)")
+    print("")
+    print("    blue help                  Pokazuje tę pomoc")
+end
+
+local function get_local_version()
+    if file_exists(VERSION_FILE) then
+        local f = io.open(VERSION_FILE, "r")
+        if f then
+            local content = f:read("*a")
+            f:close()
+            return trim(content)
+        end
+    end
+    return "0.0"
+end
+
+local function get_remote_version()
+    print("Pobieram informacje o najnowszej wersji...")
+    
+    local handle = io.popen("curl -fsSL " .. REMOTE_VERSION_URL)
+    if not handle then
+        print_color("red", "Błąd: nie udało się uruchomić curl")
+        return ""
+    end
+
+    local raw = handle:read("*a")
+    local success = handle:close()
+
+    if not success or not raw or raw == "" then
+        print_color("red", "Błąd: nie udało się pobrać version.hacker")
+        return ""
+    end
+
+    -- Wyciąganie wersji x.y lub x.y.z regexem w Lua
+    local remote_ver = raw:match("(%d+%.%d+%.?%d*)")
+    return remote_ver and trim(remote_ver) or ""
+end
+
+local function do_update()
+    local local_ver = get_local_version()
+    local remote_ver = get_remote_version()
+
+    if remote_ver == "" then
+        print_color("red", "Anulowano aktualizację (brak wersji zdalnej).")
+        return
+    end
+
+    print("Lokalna wersja:  " .. local_ver)
+    print("Zdalna wersja:   " .. remote_ver)
+
+    if local_ver == remote_ver then
+        print_color("green", "Blue Environment jest już w najnowszej wersji (" .. local_ver .. ").")
+        return
+    end
+
+    print_color("yellow", "Znaleziono nową wersję: " .. remote_ver)
+    print("Rozpoczynam aktualizację...")
+
+    local download_url = RELEASE_BASE .. "/v" .. remote_ver .. "/blue-environment"
+    local tmp_bin = "/tmp/blue-environment-" .. remote_ver
+
+    print("Pobieram binarkę: " .. download_url)
+    local download_status = os.execute("curl -fL --progress-bar -o " .. tmp_bin .. " " .. download_url)
+
+    if type(download_status) == "boolean" and not download_status or download_status ~= 0 then
+        print_color("red", "Błąd pobierania binarki.")
+        return
+    end
+
+    if not file_exists(tmp_bin) then
+        print_color("red", "Pobrany plik nie istnieje.")
+        return
+    end
+
+    print("Zatrzymuję starą binarkę (jeśli działa)...")
+    os.execute("pkill -f blue-environment || true")
+
+    print("Usuwam starą binarkę...")
+    os.execute("rm -f " .. BLUE_BIN)
+
+    print("Instaluję nową binarkę...")
+    os.execute("mv " .. tmp_bin .. " " .. BLUE_BIN)
+    os.execute("chmod +x " .. BLUE_BIN)
+
+    print("Aktualizuję plik .version...")
+    os.execute("mkdir -p " .. BLUE_DIR)
+    
+    local f = io.open(VERSION_FILE, "w")
+    if f then
+        f:write(remote_ver .. "\n")
+        f:close()
+    end
+
+    print_color("green", "✓ Blue Environment zaktualizowany do wersji " .. remote_ver)
+end
+
+local function do_start()
+    if not file_exists(BLUE_BIN) then
+        print_color("red", "Nie znaleziono binarki: " .. BLUE_BIN)
+        print("Spróbuj najpierw: blue update")
+        return
+    end
+
+    print("Uruchamiam Blue Environment...")
+    os.execute(BLUE_BIN .. " &")
+    print_color("green", "Blue Environment uruchomiony.")
+end
+
+local function do_refresh()
+    print("Odświeżam Blue Environment...")
+    os.execute("pkill -f blue-environment || true")
+
+    if file_exists(BLUE_BIN) then
+        os.execute(BLUE_BIN .. " &")
+        print_color("green", "Blue Environment odświeżony.")
+    else
+        print_color("red", "Brak binarki — uruchom blue update.")
+    end
+end
+
+local function do_kill()
+    print_color("yellow", "blue kill — placeholder (jeszcze niezaimplementowane)")
+    print("Planowane: czyste zatrzymanie procesu Blue Environment.")
+end
+
+local function do_plugins(action)
+    if action == "install" then
+        print_color("yellow", "blue plugins install — placeholder")
+    elseif action == "remove" then
+        print_color("yellow", "blue plugins remove — placeholder")
+    elseif action == "update" then
+        print_color("yellow", "blue plugins update — placeholder")
+    else
+        print_color("red", "Nieznana podkomenda plugins. Użyj: install | remove | update")
+    end
+end
+
+local function do_themes(action)
+    if action == "install" then
+        print_color("yellow", "blue themes install — placeholder")
+    elseif action == "remove" then
+        print_color("yellow", "blue themes remove — placeholder")
+    elseif action == "update" then
+        print_color("yellow", "blue themes update — placeholder")
+    else
+        print_color("red", "Nieznana podkomenda themes. Użyj: install | remove | update")
+    end
+end
+
+-- ============================================================
+--  GŁÓWNA LOGIKA
+-- ============================================================
+
+local cmd = arg[1] or ""
+local arg2 = arg[2] or ""
+
+if cmd == "" or cmd == "help" or cmd == "-h" or cmd == "--help" then
+    help()
+elseif cmd == "start" then
+    do_start()
+elseif cmd == "update" then
+    do_update()
+elseif cmd == "refresh" then
+    do_refresh()
+elseif cmd == "kill" then
+    do_kill()
+elseif cmd == "plugins" then
+    do_plugins(arg2)
+elseif cmd == "themes" then
+    do_themes(arg2)
+else
+    print_color("red", "Nieznana komenda: " .. cmd)
+    help()
+end
