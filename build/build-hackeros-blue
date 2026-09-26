@@ -71,6 +71,20 @@ sh("mkdir -p config")
 sh("cp -r helpers/blue/. config/")
 
 --------------------------------------------------------------------------
+-- 1a. /usr/bin/blue (skrypt CLI "hl" dostarczany razem z helpers/blue -
+--     patrz helpers/blue/includes.chroot_after_packages/usr/bin/blue)
+--     musi mieć bit wykonywalny w obrazie ISO. Prawa dostępu plików
+--     kopiowanych z repozytorium git nie zawsze przenoszą się 1:1 (np.
+--     po checkout na innym systemie plików / w CI), więc nadajemy je
+--     tutaj jawnie, zamiast polegać na tym, co jest w repo.
+--------------------------------------------------------------------------
+do
+    local blue_cli = BIN_DIR .. "/blue"
+    sh("test -f " .. quote(blue_cli) .. " && chmod a+x " .. quote(blue_cli) ..
+        " || echo 'Ostrzeżenie: " .. blue_cli .. " nie istnieje - pomijam chmod'")
+end
+
+--------------------------------------------------------------------------
 -- 2. Tworzymy potrzebne katalogi
 --------------------------------------------------------------------------
 sh("mkdir -p " .. quote(BLUE_DIR))
