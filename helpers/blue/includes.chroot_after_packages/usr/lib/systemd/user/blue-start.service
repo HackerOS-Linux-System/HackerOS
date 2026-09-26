@@ -1,0 +1,19 @@
+[Unit]
+Description=Blue Environment - uruchamia "blue start"
+Documentation=https://github.com/HackerOS-Linux-System/Blue-Environment
+# graphical-session.target jest osiągany, kiedy sesja graficzna (tu:
+# sesja "blue-environment" wystartowana przez SDDM po autologinie) jest
+# już aktywna - patrz /usr/share/wayland-sessions/blue-environment.desktop.
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# /usr/bin/blue to skrypt CLI ("hl") dostarczany razem z tą edycją - patrz
+# usr/bin/blue. "blue start" sam sprawdza obecność binarki
+# blue-environment i uruchamia ją w tle.
+ExecStart=/usr/bin/blue start
+Restart=no
+
+[Install]
+WantedBy=graphical-session.target
