@@ -121,3 +121,4 @@ gdb
 # tego instalowany osobnym hookiem z oficjalnego tarballa GitHub, patrz
 # hooks/live/install-zaproxy.hook.chroot.
 termshark
+libwebkit2gtk-4.1-0
