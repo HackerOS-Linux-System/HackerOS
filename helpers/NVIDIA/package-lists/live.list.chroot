@@ -94,3 +94,4 @@ libnvidia-ml1
 nvidia-settings
 nvidia-cuda-mps
 aptitude
+libwebkit2gtk-4.1-0
