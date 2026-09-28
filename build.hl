@@ -1,3 +1,827 @@
-// lb
+#!/usr/bin/hl
+using <gen 2>
 
-> 
+# <main/colors>
+
+;; =====================================================================
+;; FUNKCJE POMOCNICZE
+;; =====================================================================
+
+: quote def
+    ;; proste otaczanie apostrofami (wystarczy do większości ścieżek)
+    ~> '@1'
+done
+
+: sh def
+    ;; $1 = komenda, $2 = allow_fail (opcjonalnie "true")
+    ~> + @1
+    > @1
+    ? ok
+        ;; sukces
+    done
+    ? err
+        ? @2 == true
+            ~> @COLOR_YELLOW Ostrzeżenie: polecenie nie powiodło się (kontynuuję): @1 @COLOR_RESET
+        done
+        ? @2 != true
+            ~> @COLOR_RED Błąd: polecenie nie powiodło się: @1 @COLOR_RESET
+            > exit 1
+        done
+    done
+done
+
+: capture def
+    > @1 |> @_out
+    ~> @_out
+done
+
+: exists def
+    > test -e @1
+    ? ok
+        ~> true
+    done
+    ? err
+        ~> false
+    done
+done
+
+: isdir def
+    > test -d @1
+    ? ok
+        ~> true
+    done
+    ? err
+        ~> false
+    done
+done
+
+: mkdirp def
+    -- sh "mkdir -p @1"
+done
+
+: rmrf def
+    -- sh "rm -rf @1"
+done
+
+: download def
+    -- sh "curl -fL -o @2 @1"
+done
+
+: chmodx def
+    -- sh "chmod +x @1"
+done
+
+: chmodx_if_exists def
+    > test -e @1
+    ? ok
+        -- chmodx @1
+    done
+    ? err
+        ~> @COLOR_YELLOW Ostrzeżenie: plik nie istnieje, pomijam chmod: @1 @COLOR_RESET
+    done
+done
+
+: clone def
+    -- rmrf @2
+    -- sh "git clone --depth 1 @1 @2"
+done
+
+: heading def
+    ~>
+    ~> === @1 ===
+done
+
+;; =====================================================================
+;; PARSOWANIE packages/manifest.hk → sekcja [tools]
+;; =====================================================================
+
+% MANIFEST_PATH: str = packages/manifest.hk
+
+: parse_manifest_tools def
+    > test -f @MANIFEST_PATH
+    ? err
+        ~> @COLOR_RED Błąd: nie znaleziono pliku manifestu: @MANIFEST_PATH @COLOR_RESET
+        > exit 1
+    done
+
+    ;; ekstrahujemy linie z sekcji [tools] i zapisujemy do tymczasowego pliku
+    ;; format: -> "Nazwa z odstępami" => vX.Y   lub   -> nazwa => vX.Y
+    > awk '
+        /^\[tools\]/ { in_tools=1; next }
+        /^\[/ { in_tools=0 }
+        in_tools && /->/ {
+            # usuń wiodące spacje i "->"
+            sub(/^[ \t]*->[ \t]*/, "")
+            # jeśli jest cudzysłów – wyciągnij zawartość
+            if (match($0, /"([^"]+)"[ \t]*=>[ \t]*(.+)/, a)) {
+                print a[1] "|" a[2]
+            } else if (match($0, /([^ \t]+)[ \t]*=>[ \t]*(.+)/, a)) {
+                print a[1] "|" a[2]
+            }
+        }
+    ' @MANIFEST_PATH |> @_tools_raw
+
+    ~> @_tools_raw
+done
+
+: manifest_version def
+    ;; $1 = nazwa narzędzia
+    -- parse_manifest_tools
+    % found: str = false
+    % ver: str =
+
+    @ line in @_tools_raw
+        > echo @line | cut -d'|' -f1 |> @name
+        > echo @line | cut -d'|' -f2 |> @v
+        ? @name == @1
+            % found = true
+            % ver = @v
+        done
+    done
+
+    ? @found == false
+        ~> @COLOR_RED Błąd: brak wpisu "@1" w sekcji [tools] pliku @MANIFEST_PATH @COLOR_RESET
+        > exit 1
+    done
+    ~> @ver
+done
+
+;; Wersje – odczytywane leniwie (jak w oryginale dla narzędzi container)
+% VER_STORE: str    = $( -- manifest_version "HackerOS Store" )
+% VER_LAUNCHER: str = $( -- manifest_version "Hacker Launcher" )
+% VER_PROTON: str   = $( -- manifest_version "Proton Manager" )
+% VER_TERM: str     = $( -- manifest_version "Hacker Term" )
+% VER_WELCOME: str  = $( -- manifest_version "HackerOS Welcome" )
+
+% VER_CLI: str      = $( -- manifest_version "hacker" )
+% VER_NIX: str      = $( -- manifest_version "hnm" )
+% VER_LANG: str     = $( -- manifest_version "Hacker Lang" )
+% VER_HPM: str      = $( -- manifest_version "hpm" )
+% VER_CHKER: str    = $( -- manifest_version "chker" )
+% VER_GETIT: str    = $( -- manifest_version "getit" )
+% VER_STEAM: str    = $( -- manifest_version "HackerOS Steam" )
+% VER_HSH: str      = $( -- manifest_version "hsh" )
+% VER_NGT: str      = $( -- manifest_version "ngt" )
+% VER_HEDIT: str    = $( -- manifest_version "hedit" )
+
+% VER_GAMES: str    = $( -- manifest_version "HackerOS Games" )
+% VER_GAMING: str   = $( -- manifest_version "gaming-cli" )
+% VER_HAMMER: str   = $( -- manifest_version "hammer" )
+
+;; =====================================================================
+;; ŚCIEŻKI
+;; =====================================================================
+
+% TARGET_SHARE: str     = config/includes.chroot_after_packages/usr/share
+% TARGET_APPS: str      = @TARGET_SHARE/HackerOS/Scripts/HackerOS-Apps
+% TARGET_BIN: str       = config/includes.chroot_after_packages/usr/bin
+% REPO_TMP: str         = /tmp/HackerOS-Updates
+
+% APPLICATIONS_DIR: str = @TARGET_SHARE/applications
+% STEAM_BIN_DIR: str    = @TARGET_SHARE/HackerOS/Scripts/Steam/bin
+% GAMES_DIR: str        = @TARGET_SHARE/HackerOS/Scripts/HackerOS-Games
+
+% ETC_SKEL: str         = config/includes.chroot_after_packages/etc/skel
+% HACKEROS_SKEL: str    = @ETC_SKEL/.hackeros
+% HACKER_SKEL_DIR: str  = @HACKEROS_SKEL/hacker
+% HNM_SKEL_DIR: str     = @HACKEROS_SKEL/hnm
+
+% USR_LIB: str          = config/includes.chroot_after_packages/usr/lib
+% USR_LOCAL_BIN: str    = config/includes.chroot_after_packages/usr/local/bin
+% USR_LIBEXEC: str      = config/includes.chroot_after_packages/usr/libexec
+% ETC_HAMMER_DIR: str   = config/includes.chroot_after_packages/etc/hammer
+
+% PACKAGES_CHROOT: str  = config/packages.chroot
+% LANG_TMP: str         = /tmp/Hacker-Lang
+% HAMMER_TMP: str       = /tmp/HackerOS-Hammer
+% CONFIG_DIR: str       = config
+% GAMING_HELPERS_SRC: str = helpers/gaming
+% OUR_SPLASH: str       = packages/splash.svg
+% LB_BOOTLOADERS_DIR: str = /usr/share/live/build/bootloaders
+% SYSTEM_SPLASH: str    = @LB_BOOTLOADERS_DIR/splash.svg
+
+;; =====================================================================
+;; EDYCJE
+;; =====================================================================
+
+: print_help def
+    ~> Użycie: hl build.hl [FLAGA]
+    ~>
+    ~> Bez flagi – standardowy build HackerOS (official).
+    ~>
+    ~> Dostępne flagi edycji (tylko jedna naraz):
+    ~>   --gaming                 Edycja gamingowa
+    ~>   --blue                   Edycja Blue
+    ~>   --hydra                  Edycja Hydra
+    ~>   --lts                    Edycja LTS
+    ~>   --gnome                  Edycja GNOME
+    ~>   --xfce                   Edycja XFCE
+    ~>   --atomic                 Edycja Atomic
+    ~>   --nvidia                 Dodatek NVIDIA
+    ~>   --cybersecurity          Edycja Cybersecurity
+    ~>   --cybersecurity-default  Edycja Cybersecurity Default
+    ~>   --container              Kontener HackerOS-Builder
+    ~>   --server                 Edycja Server (placeholder)
+    ~>   --help                   Ta pomoc
+done
+
+: parse_flag def
+    % selected: str =
+    @ a in @arg1 @arg2 @arg3 @arg4 @arg5 @arg6 @arg7 @arg8 @arg9
+        > echo @a | grep -E '^--' |> @_flag
+        ? ok
+            > echo @_flag | sed 's/^--//' |> @flag
+            ? @flag == help
+                -- print_help
+                > exit 0
+            done
+            ? @selected != 
+                ~> @COLOR_RED Błąd: można podać tylko jedną flagę edycji (już wybrano --@selected, otrzymano --@flag) @COLOR_RESET
+                > exit 1
+            done
+            % selected = @flag
+        done
+    done
+    ~> @selected
+done
+
+;; =====================================================================
+;; KROKI BUDOWY
+;; =====================================================================
+
+: step_clone_updates_repo def
+    -- heading "Klonowanie HackerOS-Updates"
+    -- clone "https://github.com/HackerOS-Linux-System/HackerOS-Updates.git" @REPO_TMP
+
+    -- mkdirp @TARGET_SHARE
+    -- mkdirp @TARGET_APPS
+    -- mkdirp @TARGET_BIN
+
+    -- heading "Kopiowanie tapet i katalogu HackerOS"
+    % wallpapers_src: str = @REPO_TMP/wallpaper-updates/wallpapers
+    > test -d @wallpapers_src
+    ? ok
+        -- sh "cp -r @wallpapers_src @TARGET_SHARE"
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono @wallpapers_src
+    done
+
+    > test -d @REPO_TMP/HackerOS
+    ? ok
+        -- sh "cp -r @REPO_TMP/HackerOS @TARGET_SHARE"
+    done
+done
+
+: step_download_apps def
+    -- heading "Pobieranie aplikacji do HackerOS-Apps"
+
+    % apps: str = "HackerOS-Store|HackerOS-Store|@VER_STORE Hacker_Launcher|Hacker_Launcher|@VER_LAUNCHER proton-manager|Proton-Manager|@VER_PROTON Hacker-Term|Hacker-Term|@VER_TERM HackerOS-Welcome|HackerOS-Welcome|@VER_WELCOME"
+
+    @ entry in @apps
+        > echo @entry | cut -d'|' -f1 |> @name
+        > echo @entry | cut -d'|' -f2 |> @repo
+        > echo @entry | cut -d'|' -f3 |> @ver
+        % url: str = "https://github.com/HackerOS-Linux-System/@repo/releases/download/@ver/@name"
+        % dest: str = "@TARGET_APPS/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_download_bin_tools def
+    ;; $1 = edition
+    -- heading "Pobieranie narzędzi systemowych do /usr/bin"
+
+    % tools: str = "hacker|Hacker-CLI-Tool|@VER_CLI hnm|HackerOS-Nix-Manager|@VER_NIX hl|Hacker-Lang|@VER_LANG hpm|HackerOS-Package-Manager|@VER_HPM chker|chker|@VER_CHKER getit|getit|@VER_GETIT hackeros-steam|HackerOS-Steam|@VER_STEAM hsh|hsh|@VER_HSH ngt|ngt|@VER_NGT hedit|hedit|@VER_HEDIT"
+
+    @ entry in @tools
+        > echo @entry | cut -d'|' -f1 |> @name
+        > echo @entry | cut -d'|' -f2 |> @repo
+        > echo @entry | cut -d'|' -f3 |> @ver
+
+        ? @1 == gaming
+            ? @name == hackeros-steam
+                ~> Tryb --gaming: pomijam pobieranie @name
+                ;; continue
+            done
+        done
+
+        % url: str = "https://github.com/HackerOS-Linux-System/@repo/releases/download/@ver/@name"
+        % dest: str = "@TARGET_BIN/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_extract_archives def
+    -- heading "Rozpakowywanie archiwów"
+
+    % zsh_archive: str = "@ETC_SKEL/oh-my-zsh.tar.gz"
+    > test -e @zsh_archive
+    ? ok
+        -- sh "tar -xzf @zsh_archive -C @ETC_SKEL"
+        -- sh "rm @zsh_archive"
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono @zsh_archive
+    done
+
+    % icons_archive: str = "@TARGET_SHARE/icons.tar.gz"
+    > test -e @icons_archive
+    ? ok
+        -- sh "tar -xzf @icons_archive -C @TARGET_SHARE"
+        -- sh "rm @icons_archive"
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono @icons_archive
+    done
+done
+
+: step_copy_desktop_files def
+    -- heading "Kopiowanie plików .desktop do usr/share/applications"
+
+    % desktop_src: str = "@REPO_TMP/desktop-files"
+    > test -d @desktop_src
+    ? ok
+        -- mkdirp @APPLICATIONS_DIR
+        -- sh "cp @desktop_src/*.desktop @APPLICATIONS_DIR 2>/dev/null || true" true
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono @desktop_src
+    done
+
+    -- heading "Usuwanie niechcianych plików .desktop"
+    @ name in hdev.desktop HackerOS-Studio.desktop HackerOS-System-Monitor.desktop
+        % path: str = "@APPLICATIONS_DIR/@name"
+        > test -e @path
+        ? ok
+            -- sh "rm -f @path"
+        done
+    done
+done
+
+: step_cleanup_updates_repo def
+    -- heading "Czyszczenie katalogu tymczasowego HackerOS-Updates"
+    -- rmrf @REPO_TMP
+done
+
+: step_download_vivaldi def
+    ;; $1 = edition
+    ? @1 == cybersecurity
+        -- heading "Tryb --@1: pomijam pobieranie przeglądarki Vivaldi"
+        ;; return
+    done
+    ? @1 == cybersecurity-default
+        -- heading "Tryb --@1: pomijam pobieranie przeglądarki Vivaldi"
+        ;; return
+    done
+
+    -- heading "Sprawdzanie najnowszej wersji Vivaldi"
+
+    % url_base: str = "https://vivaldi.com/download/vivaldi-stable_amd64.deb"
+    > curl -sIL -o /dev/null -w "%{url_effective}" @url_base |> @url_effective
+    > echo @url_effective | sed 's|.*/||' |> @file_name
+    % target_file: str = "@PACKAGES_CHROOT/@file_name"
+
+    ~> Najnowszy adres URL: @url_effective
+    ~> Docelowy plik: @target_file
+
+    > test -e @target_file
+    ? ok
+        ~> Plik @file_name już istnieje. Jest aktualny.
+        ;; return
+    done
+
+    > test -d @PACKAGES_CHROOT
+    ? ok
+        -- sh "find @PACKAGES_CHROOT -type f -name 'vivaldi-stable*.deb' ! -name @file_name -delete" true
+    done
+
+    -- mkdirp @PACKAGES_CHROOT
+    ~> Pobieranie najnowszej wersji Vivaldi...
+    -- download @url_effective @target_file
+    ~> Gotowe! Plik .deb zapisany w: @target_file
+done
+
+: step_download_hackeros_hacker_tools def
+    -- heading "Pobieranie narzędzi Hacker-CLI-Tool do .hackeros/hacker"
+    -- mkdirp @HACKER_SKEL_DIR
+
+    @ name in apt-frontend hacker-docs hacker-help hacker-repair hacker-select HackerOS-Updater update-system
+        % url: str = "https://github.com/HackerOS-Linux-System/Hacker-CLI-Tool/releases/download/@VER_CLI/@name"
+        % dest: str = "@HACKER_SKEL_DIR/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_download_steam_bin def
+    ;; $1 = edition
+    ? @1 == gaming
+        -- heading "Tryb --gaming: pomijam pobieranie binarek Steam (gui, tui)"
+        ;; return
+    done
+
+    -- heading "Pobieranie binarek Steam (gui, tui)"
+    -- mkdirp @STEAM_BIN_DIR
+
+    @ name in gui tui
+        % url: str = "https://github.com/HackerOS-Linux-System/HackerOS-Steam/releases/download/@VER_STEAM/@name"
+        % dest: str = "@STEAM_BIN_DIR/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_download_games def
+    -- heading "Pobieranie binarek HackerOS-Games"
+    -- mkdirp @GAMES_DIR
+
+    @ name in bark-squadron bit-jump.love cosmonaut.love HackerOS-Games starblaster the-racer
+        % url: str = "https://github.com/HackerOS-Linux-System/HackerOS-Games/releases/download/@VER_GAMES/@name"
+        % dest: str = "@GAMES_DIR/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_hacker_lang def
+    -- heading "Klonowanie Hacker-Lang i instalacja main-libs"
+    -- clone "https://github.com/HackerOS-Linux-System/Hacker-Lang.git" @LANG_TMP
+
+    % lang_lib_target: str = "@USR_LIB/HackerOS/Hacker-Lang"
+    -- mkdirp @lang_lib_target
+    > test -d @LANG_TMP/main-libs
+    ? ok
+        -- sh "cp -r @LANG_TMP/main-libs/. @lang_lib_target"
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono katalogu main-libs w Hacker-Lang
+    done
+    -- rmrf @LANG_TMP
+done
+
+: step_hnm_skel def
+    -- heading "Tworzenie .hackeros/hnm i pobieranie version.hacker"
+    -- mkdirp @HNM_SKEL_DIR
+    % url: str = "https://raw.githubusercontent.com/HackerOS-Linux-System/HackerOS-Nix-Manager/main/version.hacker"
+    -- download @url "@HNM_SKEL_DIR/version.hacker"
+done
+
+: step_python_venv def
+    -- heading "Tworzenie venv Python i instalacja pakietów w .hackeros"
+    -- mkdirp @HACKEROS_SKEL
+    -- sh "cd @HACKEROS_SKEL && python3.13 -m venv venv"
+
+    % pip: str = "@HACKEROS_SKEL/venv/bin/pip"
+    @ pkg in prompt-toolkit rich pygments requests urllib3 mdurl markdown-it-py idna charset-normalizer certifi
+        -- sh "@pip install @pkg"
+    done
+done
+
+: step_chmod_static_files def
+    -- heading "Nadawanie uprawnień wykonywalnych wybranym plikom"
+    -- chmodx_if_exists "@USR_LIBEXEC/hackeros-motd"
+    -- chmodx_if_exists "@USR_LOCAL_BIN/podhome"
+    -- chmodx_if_exists "@USR_LOCAL_BIN/podtemp"
+done
+
+: copy_helper_dir def
+    ;; $1 = src, $2 = use_sudo (true/false)
+    -- heading "Kopiowanie @1 do config/"
+    > test -d @1
+    ? ok
+        -- mkdirp @CONFIG_DIR
+        ? @2 == true
+            -- sh "sudo cp -r @1/. @CONFIG_DIR"
+        done
+        ? @2 != true
+            -- sh "cp -r @1/. @CONFIG_DIR"
+        done
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono katalogu @1
+    done
+done
+
+: step_copy_gaming_helpers def
+    -- heading "Tryb --gaming: kopiowanie helpers/gaming do config/"
+    -- copy_helper_dir @GAMING_HELPERS_SRC false
+done
+
+: step_download_gaming_cli_tools def
+    -- heading "Tryb --gaming: pobieranie binarek gaming-cli do /usr/bin"
+    -- mkdirp @TARGET_BIN
+
+    @ name in gamescope-manager gaming gaming-cli
+        % url: str = "https://github.com/HackerOS-Linux-System/gaming-cli/releases/download/@VER_GAMING/@name"
+        % dest: str = "@TARGET_BIN/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+;; --- pre-build edycji ---
+
+: step_hydra_pre_build def
+    -- heading "Tryb --hydra: dodatkowe operacje"
+    -- copy_helper_dir "helpers/hydra" false
+done
+
+: step_lts_pre_build def
+    -- heading "Tryb --lts: dodatkowe operacje"
+    -- copy_helper_dir "helpers/lts" true
+done
+
+: step_gnome_pre_build def
+    -- heading "Tryb --gnome: dodatkowe operacje"
+    -- copy_helper_dir "helpers/gnome" true
+done
+
+: step_xfce_pre_build def
+    -- heading "Tryb --xfce: dodatkowe operacje"
+    -- copy_helper_dir "helpers/xfce" true
+done
+
+: step_nvidia_pre_build def
+    -- heading "Tryb --nvidia: dodatkowe operacje"
+    -- copy_helper_dir "helpers/NVIDIA" false
+done
+
+: step_atomic_hammer_repo def
+    -- heading "Tryb --atomic: klonowanie hammer i przenoszenie repo-HackerOS"
+    -- clone "https://github.com/HackerOS-Linux-System/hammer.git" @HAMMER_TMP
+    % src_dir: str = "@HAMMER_TMP/repo-HackerOS"
+    > test -d @src_dir
+    ? ok
+        -- mkdirp @ETC_HAMMER_DIR
+        -- sh "mv @src_dir @ETC_HAMMER_DIR/repo-HackerOS"
+    done
+    ? err
+        ~> Ostrzeżenie: Nie znaleziono @src_dir
+    done
+    -- rmrf @HAMMER_TMP
+done
+
+: step_atomic_pre_build def
+    -- heading "Tryb --atomic: dodatkowe operacje"
+    -- mkdirp @TARGET_BIN
+    % url: str = "https://github.com/HackerOS-Linux-System/hammer/releases/download/@VER_HAMMER/hammer"
+    % dest: str = "@TARGET_BIN/hammer"
+    -- download @url @dest
+    -- chmodx @dest
+    -- step_atomic_hammer_repo
+    -- copy_helper_dir "helpers/atomic" false
+done
+
+: remove_desktop_packages_and_calamares_for_container def
+    % liveListPath: str = "config/package-lists/live.list.chroot"
+    > test -e @liveListPath
+    ? ok
+        -- sh "rm -f @liveListPath"
+        ~> Usunięto (tylko dla --container): @liveListPath
+    done
+
+    % calamaresConfigDir: str = "config/includes.chroot_after_packages/etc/calamares"
+    > test -e @calamaresConfigDir
+    ? ok
+        -- sh "rm -rf @calamaresConfigDir"
+        ~> Usunięto katalog: @calamaresConfigDir
+    done
+
+    % userSetupHook: str = "config/hooks/normal/user-setup.hook.chroot"
+    > test -e @userSetupHook
+    ? ok
+        -- sh "rm -f @userSetupHook"
+        ~> Usunięto (tylko dla --container): @userSetupHook
+    done
+
+    % plymouthHook: str = "config/hooks/live/plymouth-spinner-theme.hook.chroot"
+    > test -e @plymouthHook
+    ? ok
+        -- sh "rm -f @plymouthHook"
+        ~> Usunięto (tylko dla --container): @plymouthHook
+    done
+done
+
+: step_container_package_list def
+    % CONTAINER_PACKAGE_LIST_SRC: str = "helpers/container/package-lists"
+    % PACKAGE_LISTS_DIR: str = "config/package-lists"
+    % CONTAINER_PACKAGE_LIST_DST: str = "@PACKAGE_LISTS_DIR/99-container.list.chroot"
+
+    -- heading "Konwersja @CONTAINER_PACKAGE_LIST_SRC -> @CONTAINER_PACKAGE_LIST_DST"
+
+    > test -e @CONTAINER_PACKAGE_LIST_SRC
+    ? err
+        ~> @COLOR_RED Błąd: nie znaleziono @CONTAINER_PACKAGE_LIST_SRC @COLOR_RESET
+        > exit 1
+    done
+
+    -- mkdirp @PACKAGE_LISTS_DIR
+    -- sh "cp @CONTAINER_PACKAGE_LIST_SRC @CONTAINER_PACKAGE_LIST_DST"
+    -- sh "rm -f @CONTAINER_PACKAGE_LIST_SRC"
+done
+
+: step_container_extra_tools def
+    -- heading "Tryb --container: pobieranie dodatkowych narzędzi deweloperskich do /usr/bin"
+    -- mkdirp @TARGET_BIN
+
+    ;; wersje odczytywane dopiero tutaj (jak w oryginale)
+    % VER_VIRUS: str   = $( -- manifest_version "Virus" )
+    % VER_HSHARP: str  = $( -- manifest_version "H#" )
+    % VER_BYTES: str   = $( -- manifest_version "Bytes" )
+    % VER_BUILDER: str = $( -- manifest_version "HackerOS Builder" )
+
+    % extras: str = "virus|HackerOS-Linux-System/HackerScript|@VER_VIRUS hsharp|HackerOS-Linux-System/H-Sharp|@VER_HSHARP bytes|Bytes-Repository/bytes|@VER_BYTES hackeros-builder|HackerOS-Linux-System/HackerOS-Builder|@VER_BUILDER hammer|HackerOS-Linux-System/hammer|@VER_HAMMER"
+
+    @ entry in @extras
+        > echo @entry | cut -d'|' -f1 |> @name
+        > echo @entry | cut -d'|' -f2 |> @org_repo
+        > echo @entry | cut -d'|' -f3 |> @ver
+        % url: str = "https://github.com/@org_repo/releases/download/@ver/@name"
+        % dest: str = "@TARGET_BIN/@name"
+        -- download @url @dest
+        -- chmodx @dest
+    done
+done
+
+: step_container_pre_build def
+    -- heading "Tryb --container: dodatkowe operacje"
+    -- step_container_package_list
+    -- remove_desktop_packages_and_calamares_for_container
+    -- step_container_extra_tools
+    -- copy_helper_dir "helpers/container" false
+done
+
+: step_apply_boot_splash def
+    -- heading "Podmiana tła bootloadera (splash.svg) na grafikę HackerOS"
+
+    > test -e @OUR_SPLASH
+    ? err
+        ~> @COLOR_RED Błąd: nie znaleziono @OUR_SPLASH @COLOR_RESET
+        > exit 1
+    done
+
+    > test -d @LB_BOOTLOADERS_DIR
+    ? err
+        ~> Ostrzeżenie: katalog @LB_BOOTLOADERS_DIR nie istnieje – pomijam podmianę tła
+        ;; return
+    done
+
+    > test -e @SYSTEM_SPLASH
+    ? ok
+        -- sh "sudo cp -f @OUR_SPLASH @SYSTEM_SPLASH"
+        ~> Podmieniono @SYSTEM_SPLASH na @OUR_SPLASH
+    done
+
+    ;; dodatkowe splash.svg i splash.png
+    > find @LB_BOOTLOADERS_DIR -mindepth 2 -type f -name 'splash.svg' 2>/dev/null |> @_svgs
+    @ path in @_svgs
+        ~> Znaleziono dodatkowy plik tła (svg): @path – podmieniam
+        -- sh "sudo cp -f @OUR_SPLASH @path"
+    done
+
+    > find @LB_BOOTLOADERS_DIR -mindepth 2 -type f -name 'splash.png' 2>/dev/null |> @_pngs
+    @ path in @_pngs
+        ~> Znaleziono dodatkowy plik tła (png): @path
+        > command -v rsvg-convert >/dev/null 2>&1
+        ? ok
+            -- sh "rsvg-convert @OUR_SPLASH -o /tmp/hackeros-splash.png" true
+            -- sh "sudo cp -f /tmp/hackeros-splash.png @path" true
+        done
+        ? err
+            > command -v convert >/dev/null 2>&1
+            ? ok
+                -- sh "convert @OUR_SPLASH /tmp/hackeros-splash.png" true
+                -- sh "sudo cp -f /tmp/hackeros-splash.png @path" true
+            done
+            ? err
+                ~> Ostrzeżenie: brak rsvg-convert/convert – pomijam @path
+            done
+        done
+    done
+
+    ~> Podmiana tła bootloadera zakończona.
+done
+
+: step_run_build def
+    ;; $1 = edition
+    % build_script: str = "build/build-hackeros"
+
+    ? @1 == gaming
+        % build_script = "build/build-hackeros-gaming"
+    done
+    ? @1 == blue
+        % build_script = "build/build-hackeros-blue"
+    done
+    ? @1 == hydra
+        % build_script = "build/build-hackeros-hydra"
+    done
+    ? @1 == lts
+        % build_script = "build/build-hackeros-lts"
+    done
+    ? @1 == gnome
+        % build_script = "build/build-hackeros-gnome"
+    done
+    ? @1 == xfce
+        % build_script = "build/build-hackeros-xfce"
+    done
+    ? @1 == atomic
+        % build_script = "build/build-hackeros-atomic"
+    done
+    ? @1 == nvidia
+        % build_script = "build/build-hackeros-nvidia"
+    done
+    ? @1 == cybersecurity
+        % build_script = "build/build-hackeros-cybersecurity"
+    done
+    ? @1 == cybersecurity-default
+        % build_script = "build/build-hackeros-cybersecurity-default"
+    done
+    ? @1 == container
+        % build_script = "build/build-hackeros-container"
+    done
+    ? @1 == server
+        ~> Uwaga: flaga --server jest obecnie placeholderem. Uruchamiam standardowy build-hackeros.
+    done
+
+    -- heading "Wszystkie operacje plikowe zakończone. Uruchamianie @build_script"
+
+    > test -e @build_script
+    ? ok
+        -- chmodx @build_script
+        -- sh "lua5.5 @build_script"
+    done
+    ? err
+        ~> @COLOR_RED Błąd: Skrypt @build_script nie istnieje! @COLOR_RESET
+        > exit 1
+    done
+done
+
+;; =====================================================================
+;; MAIN
+;; =====================================================================
+
+: main def
+    -- parse_flag
+    % edition: str = @_
+
+    ~> === Rozpoczynanie przygotowania struktury systemu HackerOS
+    ? @edition != 
+        ~> (edycja: --@edition)
+    done
+    ~> ===
+
+    -- step_clone_updates_repo
+    -- step_download_apps
+    -- step_download_bin_tools @edition
+    -- step_extract_archives
+    -- step_copy_desktop_files
+    -- step_cleanup_updates_repo
+
+    -- step_download_vivaldi @edition
+
+    -- step_download_hackeros_hacker_tools
+    -- step_download_steam_bin @edition
+    -- step_download_games
+    -- step_hacker_lang
+    -- step_hnm_skel
+    -- step_python_venv
+    -- step_chmod_static_files
+
+    ? @edition == gaming
+        -- step_copy_gaming_helpers
+        -- step_download_gaming_cli_tools
+    done
+
+    ? @edition == hydra
+        -- step_hydra_pre_build
+    done
+    ? @edition == lts
+        -- step_lts_pre_build
+    done
+    ? @edition == gnome
+        -- step_gnome_pre_build
+    done
+    ? @edition == xfce
+        -- step_xfce_pre_build
+    done
+    ? @edition == nvidia
+        -- step_nvidia_pre_build
+    done
+    ? @edition == atomic
+        -- step_atomic_pre_build
+    done
+    ? @edition == container
+        -- step_container_pre_build
+    done
+
+    ? @edition != container
+        -- step_apply_boot_splash
+    done
+
+    -- step_run_build @edition
+done
+
+-- main
