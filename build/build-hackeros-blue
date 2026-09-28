@@ -77,7 +77,7 @@ local BLUE_ENV_REF     = os.getenv("BLUE_ENV_REF") or "main"
 local BLUE_ENVIRONMENT_REPO = "HackerOS-Linux-System/Blue-Environment"
 
 -- Domyślny display manager edycji Blue - "hdm" (HackerOS Display Manager,
--- patrz helpers/blue/hooks/normal/hdm.hook.chrokt) albo "sddm" (patrz
+-- patrz helpers/blue/hooks/normal/hdm.hook.chroot) albo "sddm" (patrz
 -- helpers/blue/hooks/normal/sddm-autologin.hook.chroot). Oba pakiety/binarki
 -- i tak trafiają do obrazu ISO niezależnie od tego wyboru (można ręcznie
 -- przełączyć się na drugi po zainstalowaniu/uruchomieniu systemu) - ten
@@ -100,7 +100,9 @@ local BIN_DIR        = "config/includes.chroot_after_packages/usr/bin"
 -- w miejsca releasów bez tej ścieżki i wywalało build), pobieramy każdą
 -- binarkę osobno, bezpośrednio z jej właściwego, konkretnego releasu.
 local HACKEROS_COMP_URL = latest_release_asset_url("HackerOS-Linux-System/HackerOS-Comp", "hackeros-comp")
-local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.2"
+-- POPRAWKA: release v0.2 nie istnieje w HackerOS-Linux-System/HDM (404) - najnowszy
+-- istniejący to v0.1 (zawiera hdm oraz hdm-greeter).
+local HDM_BASE       = "https://github.com/HackerOS-Linux-System/HDM/releases/download/v0.1"
 
 -- Raw URL (blob/tree nie nadają się do pobierania bezpośrednio)
 local WALLPAPER_URL = "https://raw.githubusercontent.com/HackerOS-Linux-System/Blue-Environment/main/images/default.png"
@@ -134,7 +136,7 @@ sh("mkdir -p " .. quote(BIN_DIR))
 
 --------------------------------------------------------------------------
 -- 2a. Zapisujemy wybrany domyślny display manager do pliku-znacznika,
---     który hdm.hook.chrokt oraz sddm-autologin.hook.chroot odczytują
+--     który hdm.hook.chroot oraz sddm-autologin.hook.chroot odczytują
 --     w chroocie przy starcie systemu (patrz BLUE_DEFAULT_DM wyżej).
 --------------------------------------------------------------------------
 do
@@ -238,15 +240,26 @@ do
 end
 
 --------------------------------------------------------------------------
--- 6. Pobieramy binarki hdm / hdm-greeter (z releasu HDM v0.0.1) do /usr/bin
+-- 6. HDM (hdm / hdm-greeter) - TYLKO gdy wybrano BLUE_DEFAULT_DM=hdm
 --------------------------------------------------------------------------
--- POPRAWKA: wcześniej pobierane były (błędnie) bedm/bedm-greeter z releasu
--- Blue-Environment - teraz pobieramy właściwe binarki hdm/hdm-greeter,
--- z ich właściwego repozytorium HDM.
-for _, name in ipairs({ "hdm", "hdm-greeter" }) do
-    local dest = BIN_DIR .. "/" .. name
-    download(HDM_BASE .. "/" .. name, dest)
-    sh("chmod a+x " .. quote(dest))
+-- POPRAWKA: wcześniej binarki HDM były pobierane ZAWSZE, więc przy wyborze
+-- sddm build i tak próbował ściągnąć hdm (i wywalał się na 404). Teraz:
+--   * hdm  -> pobieramy hdm + hdm-greeter do /usr/bin,
+--   * sddm -> nic nie pobieramy, a pliki HDM skopiowane z helpers/blue
+--             (hdm.service, /etc/hdm) usuwamy z drzewa ISO, żeby nie
+--             zostawiać w obrazie jednostki wskazującej na nieistniejący
+--             /usr/bin/hdm (która ma Alias=display-manager.service).
+if BLUE_DEFAULT_DM == "hdm" then
+    for _, name in ipairs({ "hdm", "hdm-greeter" }) do
+        local dest = BIN_DIR .. "/" .. name
+        download(HDM_BASE .. "/" .. name, dest)
+        sh("chmod a+x " .. quote(dest))
+    end
+else
+    heading("Wybrano sddm - pomijam pobieranie HDM i usuwam jego pliki z drzewa ISO")
+    sh("rm -f config/includes.chroot_after_packages/etc/systemd/system/hdm.service")
+    sh("rm -rf config/includes.chroot_after_packages/etc/hdm")
+    sh("rm -f config/hooks/normal/hdm.hook.chroot")
 end
 
 --------------------------------------------------------------------------
