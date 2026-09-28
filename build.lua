@@ -656,11 +656,11 @@ local function step_download_games()
 end
 
 -- =====================================================================
--- KROK 11: KLON Hacker-Lang -> main-libs oraz bit.lua -> bit
+-- KROK 11: KLON Hacker-Lang -> main-libs
 -- =====================================================================
 
 local function step_hacker_lang()
-    heading("Klonowanie Hacker-Lang i instalacja main-libs oraz bit")
+    heading("Klonowanie Hacker-Lang i instalacja main-libs")
 
     clone("https://github.com/HackerOS-Linux-System/Hacker-Lang.git", LANG_TMP)
 
@@ -670,16 +670,6 @@ local function step_hacker_lang()
         sh("cp -r " .. quote(LANG_TMP .. "/main-libs") .. "/. " .. quote(lang_lib_target))
     else
         io.write("Ostrzeżenie: Nie znaleziono katalogu main-libs w Hacker-Lang\n")
-    end
-
-    mkdirp(USR_LOCAL_BIN)
-    local bit_src = LANG_TMP .. "/source-code/bit.lua"
-    if exists(bit_src) then
-        local bit_dest = USR_LOCAL_BIN .. "/bit"
-        sh("cp " .. quote(bit_src) .. " " .. quote(bit_dest))
-        chmodx(bit_dest)
-    else
-        io.write("Ostrzeżenie: Nie znaleziono pliku " .. bit_src .. "\n")
     end
 
     rmrf(LANG_TMP)
