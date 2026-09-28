@@ -1,2 +1,23 @@
-sudo systemctl daemon-reload
-sudo systemctl enable starthdm.service
+#!/bin/sh
+# =====================================================================
+# hdm.hook.chroot - włącza HDM jako display manager, ale TYLKO gdy
+# w /etc/hackeros/blue-default-dm (zapisywanym przez build-hackeros-blue)
+# jest wartość "hdm". Przy "sddm" ten hook nic nie robi.
+# =====================================================================
+set -e
+
+DM="$(cat /etc/hackeros/blue-default-dm 2>/dev/null || echo sddm)"
+if [ "$DM" != "hdm" ]; then
+    echo "HackerOS Blue: domyślny DM = '$DM' - pomijam konfigurację HDM."
+    exit 0
+fi
+
+echo "HackerOS Blue: konfiguracja HDM (autostart)..."
+if [ ! -x /usr/bin/hdm ]; then
+    echo "Błąd: wybrano hdm, ale brak /usr/bin/hdm." >&2
+    exit 1
+fi
+echo "/usr/bin/hdm" > /etc/X11/default-display-manager
+# POPRAWKA: jednostka nazywa się hdm.service (wcześniej błędnie starthdm.service)
+systemctl daemon-reload || true
+systemctl enable hdm.service
