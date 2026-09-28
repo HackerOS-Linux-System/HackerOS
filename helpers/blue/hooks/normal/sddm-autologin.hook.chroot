@@ -26,14 +26,21 @@
 #     który odpala "blue start" zaraz po wejściu sesji w
 #     graphical-session.target.
 #
-# UWAGA: edycja Blue ma też HDM (patrz helpers/blue/hooks/normal/hdm.hook.chrokt),
+# UWAGA: edycja Blue ma też HDM (patrz helpers/blue/hooks/normal/hdm.hook.chroot),
 # który dotychczas pełnił rolę menedżera logowania. Oba menedżery mają w
 # swoich jednostkach systemd "Alias=display-manager.service" - wygrywa
 # ten, którego "systemctl enable" wykonano jako ostatnie (czyli - po
-# nazwie pliku - ten hook, uruchamiany alfabetycznie po "hdm.hook.chrokt").
+# nazwie pliku - ten hook, uruchamiany alfabetycznie po "hdm.hook.chroot").
 # Jeśli docelowo ma zostać tylko jeden menedżer logowania, wystarczy
 # usunąć/zmienić odpowiedni hook.
 set -e
+
+# Gdy wybrano HDM jako domyślny display manager - SDDM nie może go nadpisać.
+DM="$(cat /etc/hackeros/blue-default-dm 2>/dev/null || echo sddm)"
+if [ "$DM" != "sddm" ]; then
+    echo "HackerOS Blue: domyślny DM = '$DM' - pomijam konfigurację SDDM."
+    exit 0
+fi
 
 echo "========================================================"
 echo "  HackerOS Blue: konfiguracja SDDM (autostart + autologin)..."
