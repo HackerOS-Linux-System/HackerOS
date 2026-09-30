@@ -16,15 +16,12 @@
 #      config/hooks/normal/user-setup.hook.chroot, więc pytanie o nie
 #      przy każdym starcie nie ma sensu).
 #
-# Sama sesja domyślna (Session=blue-environment w autologin.conf) oraz
-# uruchomienie polecenia "blue start" po zalogowaniu są już obsłużone
-# przez:
-#   - usr/share/wayland-sessions/blue-environment.desktop (sesja Wayland
-#     wybierana przez SDDM),
-#   - usr/lib/systemd/user/blue-start.service (+ jego włączenie przez
-#     usr/lib/systemd/user/graphical-session.target.wants/blue-start.service),
-#     który odpala "blue start" zaraz po wejściu sesji w
-#     graphical-session.target.
+# Sesja (Session=blue-environment.desktop) uruchamia bezposrednio
+# /usr/share/Blue-Environment/blue-environment - patrz
+# usr/share/wayland-sessions/blue-environment.desktop (pelna sciezka;
+# wczesniej "Exec=blue-environment" nie bylo w PATH, przez co SDDM odrzucal
+# sesje). Dawny blue-start.service zostal usuniety: "blue start" konczyl
+# sie od razu, a systemd zabijal wtedy proces w tle.
 #
 # UWAGA: edycja Blue ma też HDM (patrz helpers/blue/hooks/normal/hdm.hook.chroot),
 # który dotychczas pełnił rolę menedżera logowania. Oba menedżery mają w
@@ -60,6 +57,17 @@ else
 fi
 
 systemctl daemon-reload
+
+# Skrypt zapisujacy autologin w sesji live (patrz blue-live-autologin.service).
+chmod +x /usr/lib/hackeros/blue-live-autologin.sh 2>/dev/null || true
+systemctl enable blue-live-autologin.service || \
+    echo "Ostrzeżenie: nie udało się włączyć blue-live-autologin.service" >&2
+
+# Skrot /usr/bin/blue-environment (sesja uzywa pelnej sciezki, ale skrot
+# ulatwia uruchamianie recznie z terminala).
+if [ -x /usr/share/Blue-Environment/blue-environment ] && [ ! -e /usr/bin/blue-environment ]; then
+    ln -s /usr/share/Blue-Environment/blue-environment /usr/bin/blue-environment
+fi
 
 if [ -f /usr/lib/systemd/system/sddm.service ] || [ -f /etc/systemd/system/sddm.service ]; then
     systemctl enable sddm.service
