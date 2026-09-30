@@ -1,0 +1,14 @@
+[Unit]
+Description=Blue Environment (live) - autologin w SDDM
+# Tylko w sesji live (live-boot tworzy /run/live). Na zainstalowanym
+# systemie jednostka sie nie uruchamia.
+ConditionPathExists=/run/live
+After=live-config.service
+Before=display-manager.service sddm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/hackeros/blue-live-autologin.sh
+
+[Install]
+WantedBy=multi-user.target
