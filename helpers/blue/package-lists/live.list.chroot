@@ -13,6 +13,7 @@ lua5.5
 ruby
 curl
 wget
+zstd
 git
 fzf
 kate
