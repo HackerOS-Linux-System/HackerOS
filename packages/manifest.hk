@@ -9,7 +9,7 @@
 -> "Hacker Lang" => snapshot-2026-08-07
 -> hpm => v0.9
 -> chker => v0.1
--> getit => v0.4
+-> getit => v0.5
 -> "HackerOS Steam" => v0.4
 -> hsh => v0.4
 -> ngt => v0.4
@@ -17,7 +17,7 @@
 -> "HackerOS Games" => v0.8
 -> "gaming-cli" => v0.2
 -> hammer => v0.5.0
--> Virus => v0.1.0
+-> hackerc => v0.5.0
 -> H# => v0.8
 -> Bytes => v0.8.0
 -> "HackerOS Builder" => v0.5
