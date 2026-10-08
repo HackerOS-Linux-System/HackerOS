@@ -8,7 +8,7 @@ zsh
 haruna
 flatpak
 snapd
-python3.13-venv
+python3.14-venv
 lua5.5
 ruby
 curl
