@@ -34,6 +34,29 @@ pipewire
 alsa-utils
 mesa-utils
 mesa-vulkan-drivers
+gamemode
+lsb-release
+love
+distrobox
+glow
+neowofetch
+cage
+labwc
+wl-clipboard
+grim
+slurp
+xwayland
+brightnessctl
+swaylock
+sddm
+libwebkit2gtk-4.1-0
+network-manager
+
+# installer deps
+parted
+dosfstools
+
+# firmware
 amd64-microcode
 intel-microcode
 firmware-linux
@@ -57,24 +80,9 @@ firmware-ti-connectivity
 firmware-zd1211
 firmware-samsung 
 firmware-ipw2x00
-gamemode
-lsb-release
-love
-distrobox
-glow
-neowofetch
-cage
-labwc
-wl-clipboard
-grim
-slurp
-xwayland
-brightnessctl
-swaylock
-sddm
-libwebkit2gtk-4.1-0
-network-manager
 
-# installer deps
-parted
-dosfstools
+# other deps
+qemu-system-x86 
+qemu-utils
+ovmf
+power-profiles-daemon
