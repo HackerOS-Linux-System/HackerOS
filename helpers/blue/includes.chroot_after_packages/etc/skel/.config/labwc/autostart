@@ -5,6 +5,13 @@
 # starts labwc as `labwc -s "blue-environment --labwc-child"`, which is what
 # launches (and relaunches) the shell.
 
+# Solid dark-navy backdrop behind the shell, so the screen is never an
+# unexplained flat blue/black while the Blue shell (and its startup splash)
+# is still loading. Harmless afterwards — the shell covers it fullscreen.
+if command -v swaybg >/dev/null 2>&1; then
+  swaybg -c 060d1f -m solid_color >/dev/null 2>&1 &
+fi
+
 # Make the Wayland session visible to systemd --user / D-Bus activated apps
 # (portals, file choosers, screen sharing, ...).
 if command -v dbus-update-activation-environment >/dev/null 2>&1; then
