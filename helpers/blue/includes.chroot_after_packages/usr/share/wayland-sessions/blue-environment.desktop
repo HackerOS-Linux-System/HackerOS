@@ -2,6 +2,6 @@
 Name=Blue Environment
 Comment=Blue Environment graphical environment for HackerOS.
 Exec=blue start
-TryExec=blue start
+TryExec=blue
 Type=Application
 DesktopNames=Blue;labwc
