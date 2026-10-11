@@ -1,0 +1,68 @@
+#!/bin/sh
+# =====================================================================
+# gdm.hook.chroot - włącza GDM (pakiet Debiana: gdm3) jako display manager,
+# ale TYLKO gdy w /etc/hackeros/blue-default-dm (zapisywanym przez
+# build-hackeros-blue) jest wartość "gdm". Przy innych wartościach ten hook
+# nic nie robi.
+#
+# Pakiety (gdm3, gnome-shell, gnome-session-bin, accountsservice) dopisuje
+# generowana lista config/package-lists/blue-display-manager.list.chroot.
+# Autologin i domyślną sesję w systemie live zapisuje
+# usr/lib/hackeros/blue-live-autologin.sh.
+# =====================================================================
+set -e
+
+DM="$(cat /etc/hackeros/blue-default-dm 2>/dev/null || echo sddm)"
+if [ "$DM" != "gdm" ]; then
+    echo "HackerOS Blue: domyślny DM = '$DM' - pomijam konfigurację GDM."
+    exit 0
+fi
+
+echo "========================================================"
+echo "  HackerOS Blue: konfiguracja GDM (autostart)..."
+echo "========================================================"
+
+export DEBIAN_FRONTEND=noninteractive
+
+if [ ! -x /usr/sbin/gdm3 ] && [ ! -x /usr/sbin/gdm ] && [ ! -x /usr/bin/gdm ]; then
+    echo "Błąd: wybrano gdm, ale brak binarki gdm3 (pakiet 'gdm3')." >&2
+    exit 1
+fi
+GDM_BIN="/usr/sbin/gdm3"
+[ -x "$GDM_BIN" ] || GDM_BIN="/usr/sbin/gdm"
+[ -x "$GDM_BIN" ] || GDM_BIN="/usr/bin/gdm"
+
+echo "$GDM_BIN" > /etc/X11/default-display-manager
+echo "gdm3 shared/default-x-display-manager select gdm3" | debconf-set-selections || true
+
+if [ -x /usr/share/Blue-Environment/blue-environment ] && [ ! -e /usr/bin/blue-environment ]; then
+    ln -s /usr/share/Blue-Environment/blue-environment /usr/bin/blue-environment
+fi
+
+chmod +x /usr/lib/hackeros/blue-live-autologin.sh 2>/dev/null || true
+systemctl daemon-reload || true
+systemctl enable blue-live-autologin.service || \
+    echo "Ostrzeżenie: nie udało się włączyć blue-live-autologin.service" >&2
+
+# Jednostka nazywa się gdm.service (z aliasem gdm3.service) albo - w starszych
+# wydaniach - gdm3.service. Wybieramy tę, która faktycznie istnieje.
+UNIT=""
+for candidate in gdm.service gdm3.service; do
+    if [ -f "/usr/lib/systemd/system/$candidate" ] || [ -f "/etc/systemd/system/$candidate" ]; then
+        UNIT="$candidate"
+        break
+    fi
+done
+if [ -z "$UNIT" ]; then
+    echo "Błąd: brak gdm.service/gdm3.service - czy pakiet 'gdm3' został zainstalowany?" >&2
+    exit 1
+fi
+
+# Patrz komentarz w lightdm.hook.chroot: usuwamy istniejący alias i włączamy
+# z --force, żeby wygrał wybrany menedżer.
+rm -f /etc/systemd/system/display-manager.service
+systemctl enable --force "$UNIT"
+
+echo "========================================================"
+echo "  HackerOS Blue: GDM skonfigurowany ($UNIT)."
+echo "========================================================"
