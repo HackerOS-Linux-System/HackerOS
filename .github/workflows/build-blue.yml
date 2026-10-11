@@ -20,16 +20,22 @@ name: Build HackerOS Blue
 #
 #   2) który display manager ma być domyślny (autostartowany na starcie
 #      systemu): "sddm" (domyślnie, z autologinem - patrz
-#      helpers/blue/hooks/normal/sddm-autologin.hook.chroot) albo "hdm"
-#      (HackerOS Display Manager - patrz helpers/blue/hooks/normal/hdm.hook.chrokt).
-#      Oba menedżery i tak trafiają do obrazu ISO niezależnie od tego
-#      wyboru - decyduje on wyłącznie, który z nich zostanie WŁĄCZONY
-#      jako aktywny przy starcie (patrz plik-znacznik
-#      /etc/hackeros/blue-default-dm, zapisywany przez
-#      build/build-hackeros-blue i odczytywany przez oba hooki).
+#      helpers/blue/hooks/normal/sddm-autologin.hook.chroot), "hdm"
+#      (HackerOS Display Manager - patrz helpers/blue/hooks/normal/hdm.hook.chroot),
+#      "lightdm" (LightDM + lightdm-gtk-greeter - patrz
+#      helpers/blue/hooks/normal/lightdm.hook.chroot) albo "gdm" (GDM, pakiet
+#      gdm3 - patrz helpers/blue/hooks/normal/gdm.hook.chroot).
+#      SDDM trafia do obrazu zawsze; LightDM i GDM są doinstalowywane tylko
+#      po wybraniu; ten wybór decyduje, który menedżer zostanie WŁĄCZONY jako
+#      aktywny przy starcie (plik-znacznik /etc/hackeros/blue-default-dm,
+#      zapisywany przez build/build-hackeros-blue i odczytywany przez hooki).
 #
-# Oba wybory trafiają do build/build-hackeros-blue przez zmienne
-# środowiskowe BLUE_ENV_SOURCE / BLUE_ENV_VERSION / BLUE_ENV_REF oraz
+#   3) który interfejs (UI) powłoki Blue Environment zbudować - "default"
+#      (komputery), "phones" (src/phones) albo "tv" (src/tv). Dotyczy
+#      wyłącznie blue_env_source=source.
+#
+# Wybory trafiają do build/build-hackeros-blue przez zmienne środowiskowe
+# BLUE_ENV_SOURCE / BLUE_ENV_VERSION / BLUE_ENV_REF / BLUE_ENV_UI oraz
 # BLUE_DEFAULT_DM - patrz ten skrypt, sekcje na jego początku.
 on:
   workflow_dispatch:
@@ -63,22 +69,37 @@ on:
         required: false
         default: "main"
         type: string
+      blue_env_ui:
+        description: >-
+          Interfejs powloki Blue Environment: "default" (komputery -
+          dotychczasowy pulpit), "phones" (src/phones - telefony) albo "tv"
+          (src/tv - telewizory, nawigacja pilotem/padem). UZYWANE WYLACZNIE
+          gdy wybrano blue_env_source=source (gotowe binarki z Releases maja
+          zawsze interfejs "default").
+        required: true
+        default: "default"
+        type: choice
+        options:
+          - default
+          - phones
+          - tv
       blue_default_dm:
         description: >-
           Domyslny display manager edycji Blue. "sddm" (domyslnie) -
           logowanie graficzne przez SDDM z autologinem (patrz
           helpers/blue/hooks/normal/sddm-autologin.hook.chroot). "hdm" -
-          logowanie przez HDM, czyli HackerOS Display Manager (patrz
-          helpers/blue/hooks/normal/hdm.hook.chrokt). Oba menedzery i tak
-          trafiaja do obrazu ISO niezaleznie od wyboru - mozna recznie
-          przelaczyc sie na drugi po starcie systemu ("systemctl enable
-          sddm.service" / "systemctl enable starthdm.service").
+          HackerOS Display Manager. "lightdm" - LightDM z
+          lightdm-gtk-greeter. "gdm" - GDM (gdm3; doinstalowuje spory
+          kawalek stosu GNOME). Mozna recznie przelaczyc sie na inny po
+          starcie systemu ("systemctl enable --force <unit>.service").
         required: true
         default: "sddm"
         type: choice
         options:
           - sddm
           - hdm
+          - lightdm
+          - gdm
 env:
   # Ta sama wersja Lua co w .github/workflows/build.yml (patrz identyczny
   # komentarz tam) - Lua 5.5 nie ma jeszcze paczki w repozytoriach Ubuntu,
@@ -220,6 +241,7 @@ jobs:
           BLUE_ENV_SOURCE: ${{ inputs.blue_env_source }}
           BLUE_ENV_VERSION: ${{ inputs.blue_env_version }}
           BLUE_ENV_REF: ${{ inputs.blue_env_ref }}
+          BLUE_ENV_UI: ${{ inputs.blue_env_ui }}
           BLUE_DEFAULT_DM: ${{ inputs.blue_default_dm }}
         run: |
           chmod +x build.lua
@@ -247,6 +269,31 @@ jobs:
             exit 1
           fi
           echo "OK: domyślny display manager = $DM_VALUE (plik-znacznik $DM_MARKER)."
+
+          # Dla lightdm/gdm musi istnieć wygenerowana lista pakietów, a dla
+          # pozostałych - nie (żeby nie wciągać niepotrzebnie ich pakietów).
+          DM_LIST="config/package-lists/blue-display-manager.list.chroot"
+          case "$DM_VALUE" in
+            lightdm|gdm)
+              if [ ! -f "$DM_LIST" ]; then
+                echo "Błąd: brak $DM_LIST dla display managera '$DM_VALUE'." >&2
+                exit 1
+              fi
+              echo "OK: lista pakietów display managera:"; cat "$DM_LIST"
+              ;;
+            *)
+              if [ -f "$DM_LIST" ]; then
+                echo "Błąd: $DM_LIST nie powinno istnieć dla '$DM_VALUE'." >&2
+                exit 1
+              fi
+              ;;
+          esac
+          for hook in lightdm gdm hdm; do
+            if [ "$hook" != "$DM_VALUE" ] && [ -f "config/hooks/normal/$hook.hook.chroot" ]; then
+              echo "Błąd: hook $hook.hook.chroot został w drzewie, a wybrano '$DM_VALUE'." >&2
+              exit 1
+            fi
+          done
 
       - name: Wyszukanie zbudowanych obrazów ISO
         id: find_iso
@@ -278,7 +325,7 @@ jobs:
         if: steps.find_iso.outputs.iso_found != ''
         uses: actions/upload-artifact@v4
         with:
-          name: HackerOS-V${{ steps.version.outputs.version }}-blue-${{ inputs.blue_env_source }}-${{ inputs.blue_default_dm }}
+          name: HackerOS-V${{ steps.version.outputs.version }}-blue-${{ inputs.blue_env_source }}-${{ inputs.blue_env_ui }}-${{ inputs.blue_default_dm }}
           path: |
             ${{ steps.rename_iso.outputs.iso_path }}
             ${{ steps.rename_iso.outputs.iso_path }}.sha256sum
