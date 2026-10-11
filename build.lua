@@ -134,6 +134,47 @@ end
 
 local MANIFEST_TOOLS = parse_hk_tools_manifest(MANIFEST_PATH)
 
+-- Lista WSZYSTKICH wpisów, które build.lua obsługuje -- dokładnie te, które
+-- są w packages/manifest.hk i tylko one. Walidacja działa w obie strony:
+--   * wpis w manifeście, którego build.lua nie zna  -> błąd (nowy wpis
+--     trzeba najpierw obsłużyć w build.lua, żeby nie został po cichu
+--     zignorowany),
+--   * wpis znany build.lua, a nieobecny w manifeście -> błąd (żeby build.lua
+--     nie czytał ani nie pobierał niczego, czego manifest nie definiuje).
+local KNOWN_MANIFEST_ENTRIES = {
+    "HackerOS Store", "Hacker Launcher", "Proton Manager", "Hacker Term",
+    "HackerOS Welcome", "hacker", "hnm", "Hacker Lang", "hpm", "chker",
+    "getit", "HackerOS Steam", "hsh", "ngt", "hedit", "HackerOS Games",
+    "gaming-cli", "hammer", "HackerScript", "H#", "bit", "HackerOS Builder",
+    "Hacker Mode",
+}
+
+local function validate_manifest_entries()
+    local known = {}
+    local failed = false
+    for _, name in ipairs(KNOWN_MANIFEST_ENTRIES) do
+        known[name] = true
+        if not MANIFEST_TOOLS[name] then
+            io.stderr:write("Błąd: build.lua oczekuje wpisu \"" .. name ..
+                            "\" w sekcji [tools] pliku " .. MANIFEST_PATH .. "\n")
+            failed = true
+        end
+    end
+    for name, _ in pairs(MANIFEST_TOOLS) do
+        if not known[name] then
+            io.stderr:write("Błąd: wpis \"" .. name .. "\" z " .. MANIFEST_PATH ..
+                            " nie jest obsługiwany przez build.lua (dodaj jego obsługę " ..
+                            "i wpis w KNOWN_MANIFEST_ENTRIES)\n")
+            failed = true
+        end
+    end
+    if failed then
+        os.exit(1)
+    end
+end
+
+validate_manifest_entries()
+
 -- Zwraca wersję narzędzia z manifestu albo przerywa build z jasnym
 -- komunikatem, jeśli brakuje wpisu (lepiej wywalić się od razu na
 -- starcie, niż pobrać/skopiować coś z pustą/nil wersją w środku builda).
@@ -177,17 +218,16 @@ local VER_GAMING = manifest_version("gaming-cli")
 -- step_container_pre_build)
 local VER_HAMMER = manifest_version("hammer")
 
--- UWAGA: WERSJE narzędzi dodatkowych dla --container (Virus, H#,
--- Bytes, HackerOS Builder) CELOWO NIE są odczytywane tutaj jako
--- top-level local (jak VER_HAMMER powyżej) -- gdyby były, manifest_version()
--- przerywałby build.lua przy KAŻDEJ edycji (nawet --atomic, --gaming, bez
--- flagi...), jeśli w packages/manifest.hk zabraknie któregoś z tych
--- wpisów (bo cały plik build.lua jest wykonywany od góry do dołu zanim
--- main() w ogóle spojrzy na flagę --container). Realnie tak się właśnie
--- stało: build --atomic wywalał się błędem "brak wpisu HackerOS-Builder",
--- mimo że --container nawet nie było użyte. Odczyt tych wersji jest więc
--- PRZENIESIONY do step_container_extra_tools() niżej -- wykonuje się
--- wyłącznie gdy faktycznie budujemy --container.
+-- Narzędzia dodatkowe tylko dla --container (czytane tu, bo manifest jest
+-- walidowany w całości na starcie -- wszystkie wpisy muszą istnieć zawsze).
+local VER_HACKERSCRIPT = manifest_version("HackerScript")    -- hackerc
+local VER_HSHARP       = manifest_version("H#")              -- /usr/bin/h#
+local VER_BIT          = manifest_version("bit")
+local VER_BUILDER      = manifest_version("HackerOS Builder")
+
+-- "Hacker Mode": wpis jest w manifeście, ale build.lua nie wykonuje dla niego
+-- żadnych kroków (nic nie pobiera ani nie kopiuje) -- patrz raport.
+local VER_HACKER_MODE  = manifest_version("Hacker Mode")
 
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
@@ -1007,35 +1047,27 @@ local function step_container_extra_tools()
 
     mkdirp(TARGET_BIN)
 
-    -- { nazwa binarki, organizacja/repo GitHub, wersja }
-    -- UWAGA: Bytes żyje pod ORGANIZACJĄ "Bytes-Repository", NIE
-    -- "HackerOS-Linux-System" jak reszta -- dlatego pełna ścieżka
-    -- org/repo jest podawana jawnie dla każdego narzędzia zamiast
-    -- zakładać wspólny prefiks (tak jak robią to inne pętle w tym pliku).
-    -- Analogicznie: Virus (nazwa narzędzia/klucz w manifeście) jest
-    -- publikowany pod REPOZYTORIUM "HackerScript" (repo nie zostało
-    -- przemianowane wraz z narzędziem) -- stąd org_repo poniżej wskazuje
-    -- na .../HackerScript, mimo że name = "virus".
-    --
-    -- Wersje odczytywane TUTAJ (dopiero w momencie wywołania tej funkcji,
-    -- NIE jako top-level local na górze pliku) -- patrz komentarz przy
-    -- VER_HAMMER. Klucze DOKŁADNIE takie, jak w packages/manifest.hk
-    -- (uwaga: "HackerOS Builder" ma SPACJĘ, nie myślnik).
+    -- Pola: asset = nazwa pliku w release na GitHubie,
+    --       dest  = nazwa pliku docelowego w /usr/bin (może się różnić).
+    -- Wersje pochodzą z manifestu (zawierają już prefiks "v", np. v0.1.0,
+    -- więc NIE dokładamy drugiego "v" do URL-a).
     local extra_tools = {
-        { name = "virus",            org_repo = "HackerOS-Linux-System/HackerScript",      ver = manifest_version("Virus") },
-        { name = "hsharp",           org_repo = "HackerOS-Linux-System/H-Sharp",           ver = manifest_version("H#") },
-        { name = "bytes",            org_repo = "Bytes-Repository/bytes",                  ver = manifest_version("Bytes") },
-        { name = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder",  ver = manifest_version("HackerOS Builder") },
-        -- hammer jest też pobierany dla --atomic (step_atomic_pre_build),
-        -- ale to ODDZIELNE wywołanie/miejsce w drzewie -- kontener ma
-        -- dostać własną kopię w TYM SAMYM miejscu co pozostałe narzędzia.
-        { name = "hammer",           org_repo = "HackerOS-Linux-System/hammer",            ver = VER_HAMMER },
+        -- HackerScript: tylko binarka hackerc.
+        { asset = "hackerc",          dest = "hackerc",          org_repo = "HackerOS-Linux-System/HackerScript",  ver = VER_HACKERSCRIPT },
+        -- H#: pobierane jako "hsharp", ale instalowane jako /usr/bin/h#.
+        { asset = "hsharp",           dest = "h#",               org_repo = "HackerOS-Linux-System/H-Sharp",       ver = VER_HSHARP },
+        -- bit: https://github.com/HackerOS-Linux-System/bit/releases/download/<ver>/bit
+        { asset = "bit",              dest = "bit",              org_repo = "HackerOS-Linux-System/bit",           ver = VER_BIT },
+        { asset = "hackeros-builder", dest = "hackeros-builder", org_repo = "HackerOS-Linux-System/HackerOS-Builder", ver = VER_BUILDER },
+        -- hammer jest też pobierany dla --atomic (step_atomic_pre_build), ale
+        -- to ODDZIELNE miejsce w drzewie -- kontener dostaje własną kopię.
+        { asset = "hammer",           dest = "hammer",           org_repo = "HackerOS-Linux-System/hammer",        ver = VER_HAMMER },
     }
 
     for _, tool in ipairs(extra_tools) do
         local url  = "https://github.com/" .. tool.org_repo ..
-                     "/releases/download/" .. tool.ver .. "/" .. tool.name
-        local dest = TARGET_BIN .. "/" .. tool.name
+                     "/releases/download/" .. tool.ver .. "/" .. tool.asset
+        local dest = TARGET_BIN .. "/" .. tool.dest
         download(url, dest)
         chmodx(dest)
     end
