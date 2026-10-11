@@ -225,8 +225,7 @@ local VER_HSHARP       = manifest_version("H#")              -- /usr/bin/h#
 local VER_BIT          = manifest_version("bit")
 local VER_BUILDER      = manifest_version("HackerOS Builder")
 
--- "Hacker Mode": wpis jest w manifeście, ale build.lua nie wykonuje dla niego
--- żadnych kroków (nic nie pobiera ani nie kopiuje) -- patrz raport.
+-- Hacker Mode (tylko edycja --gaming, patrz step_download_hacker_mode).
 local VER_HACKER_MODE  = manifest_version("Hacker Mode")
 
 -- =====================================================================
@@ -820,6 +819,46 @@ local function step_download_gaming_cli_tools()
 end
 
 -- =====================================================================
+-- KROK 17 (TYLKO --gaming): HACKER MODE
+-- =====================================================================
+
+-- Pobiera binarkę Hacker-Mode oraz pliki sesji z repo Hacker-Mode:
+--   binarka  -> /usr/bin/Hacker-Mode
+--   scripts/hacker-mode.desktop          -> /usr/share/wayland-sessions/
+--   scripts/hacker-mode-wrapper.desktop  -> /usr/share/applications/
+--   scripts/hacker-mode-session          -> /usr/bin/ (wykonywalny)
+-- Wersja z packages/manifest.hk ("Hacker Mode", z prefiksem "v").
+-- Pliki ze scripts/ pobierane z raw.githubusercontent.com (adres "blob"
+-- zwraca stronę HTML, nie zawartość pliku).
+local function step_download_hacker_mode()
+    heading("Tryb --gaming: pobieranie Hacker Mode")
+
+    local wayland_sessions = TARGET_SHARE .. "/wayland-sessions"
+    mkdirp(TARGET_BIN)
+    mkdirp(wayland_sessions)
+    mkdirp(APPLICATIONS_DIR)
+
+    local bin_dest = TARGET_BIN .. "/Hacker-Mode"
+    download("https://github.com/HackerOS-Linux-System/Hacker-Mode/releases/download/" ..
+             VER_HACKER_MODE .. "/Hacker-Mode", bin_dest)
+    chmodx(bin_dest)
+
+    local raw = "https://raw.githubusercontent.com/HackerOS-Linux-System/Hacker-Mode/main/scripts/"
+
+    local session_desktop = wayland_sessions .. "/hacker-mode.desktop"
+    download(raw .. "hacker-mode.desktop", session_desktop)
+    sh("chmod 644 " .. quote(session_desktop))
+
+    local wrapper_desktop = APPLICATIONS_DIR .. "/hacker-mode-wrapper.desktop"
+    download(raw .. "hacker-mode-wrapper.desktop", wrapper_desktop)
+    sh("chmod 644 " .. quote(wrapper_desktop))
+
+    local session_script = TARGET_BIN .. "/hacker-mode-session"
+    download(raw .. "hacker-mode-session", session_script)
+    chmodx(session_script)
+end
+
+-- =====================================================================
 -- DODATKOWE KROKI PRE-BUILD DLA POSZCZEGÓLNYCH EDYCJI
 -- =====================================================================
 
@@ -1271,6 +1310,7 @@ local function main()
     if edition == "gaming" then
         step_copy_gaming_helpers()
         step_download_gaming_cli_tools()
+        step_download_hacker_mode()
     end
 
     local pre_build_fn = edition and EDITION_PRE_BUILD[edition]
