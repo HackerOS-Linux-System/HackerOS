@@ -1,10 +1,10 @@
 [Unit]
-Description=Blue Environment (live) - autologin w SDDM
+Description=Blue Environment (live) - autologin w display managerze (sddm/lightdm/gdm)
 # Tylko w sesji live (live-boot tworzy /run/live). Na zainstalowanym
 # systemie jednostka sie nie uruchamia.
 ConditionPathExists=/run/live
 After=live-config.service
-Before=display-manager.service sddm.service
+Before=display-manager.service sddm.service lightdm.service gdm.service gdm3.service
 
 [Service]
 Type=oneshot
