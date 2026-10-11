@@ -3,6 +3,14 @@
 local BINARY_FILE   = "/usr/lib/live/build/binary"
 local BINARY_BACKUP = "/usr/lib/live/build/binary.backup"
 
+-- live-build (przy --linux-flavours "none") generuje wpisy bootloadera
+-- (GRUB/syslinux) szukające plików /live/vmlinuz-*none oraz
+-- /live/initrd.img-*none. Jądro xanmod ma w nazwie np. "6.x-x64v3-xanmod1",
+-- więc kopiujemy je do binary/live/ z doklejonym sufiksem "-none", dzięki
+-- czemu wzorzec generowany przez live-build trafia w istniejące pliki.
+-- (To był błąd: "file `/live/vmlinuz-*none' not found".)
+local KERNEL_FLAVOUR_SUFFIX = "none"
+
 -- =====================================================================
 -- FUNKCJE POMOCNICZE
 -- =====================================================================
@@ -74,12 +82,19 @@ local function patch_binary_script()
 
     local old = 'lb binary_syslinux "${@}"'
     local new = table.concat({
-        "# Kopiowanie jadra xanmod do binary/live/",
+        "# [HackerOS] Kopiowanie jadra xanmod do binary/live/ (nazwy z sufiksem -" .. KERNEL_FLAVOUR_SUFFIX .. ")",
         "mkdir -p binary/live",
         "VMLINUZ=$(ls chroot/boot/vmlinuz-*xanmod* 2>/dev/null | sort -V | tail -n1)",
         "INITRD=$(ls chroot/boot/initrd.img-*xanmod* 2>/dev/null | sort -V | tail -n1)",
-        'if [ -n "$VMLINUZ" ]; then cp "$VMLINUZ" "binary/live/$(basename $VMLINUZ)"; fi',
-        'if [ -n "$INITRD" ]; then cp "$INITRD" "binary/live/$(basename $INITRD)"; fi',
+        'if [ -z "$VMLINUZ" ] || [ -z "$INITRD" ]; then',
+        '    echo "E: Brak jadra/initrd xanmod w chroot/boot (VMLINUZ=$VMLINUZ INITRD=$INITRD)" >&2',
+        "    exit 1",
+        "fi",
+        'KVER=$(basename "$VMLINUZ" | sed "s/^vmlinuz-//")',
+        "rm -f binary/live/vmlinuz-* binary/live/initrd.img-*",
+        'cp "$VMLINUZ" "binary/live/vmlinuz-${KVER}-' .. KERNEL_FLAVOUR_SUFFIX .. '"',
+        'cp "$INITRD" "binary/live/initrd.img-${KVER}-' .. KERNEL_FLAVOUR_SUFFIX .. '"',
+        'echo "I: xanmod -> binary/live/vmlinuz-${KVER}-' .. KERNEL_FLAVOUR_SUFFIX .. '"',
         'lb binary_syslinux "${@}"',
     }, "\n")
 
@@ -143,10 +158,66 @@ local function write_xanmod_hook()
 end
 
 -- =====================================================================
+-- HOOK BINARY: siatka bezpieczeństwa dla konfiguracji bootloadera
+-- =====================================================================
+-- Uruchamiany po wygenerowaniu grub.cfg / isolinux.cfg, a przed zbudowaniem
+-- ISO. Podmienia ewentualne wzorce "vmlinuz-*none" / "initrd.img-*none" na
+-- dokładne nazwy plików z binary/live/ (syslinux nie obsługuje wildcardów,
+-- GRUB tak, ale jawne nazwy są pewniejsze) i kończy build błędem, jeśli
+-- jądra lub initrd brakuje w obrazie.
+
+local BOOTCFG_HOOK_PATH = "config/hooks/normal/0020-xanmod-bootcfg.hook.binary"
+
+local BOOTCFG_HOOK_CONTENT = [[#!/bin/sh
+set -e
+BIN=""
+for d in binary /binary ../binary; do
+    if [ -d "$d/live" ]; then BIN="$d"; break; fi
+done
+if [ -z "$BIN" ]; then
+    echo "W: Nie znaleziono katalogu binary/live - pomijam poprawke konfiguracji bootloadera."
+    exit 0
+fi
+VMLINUZ=$(ls "$BIN"/live/vmlinuz-* 2>/dev/null | sort -V | tail -n1)
+INITRD=$(ls "$BIN"/live/initrd.img-* 2>/dev/null | sort -V | tail -n1)
+if [ -z "$VMLINUZ" ] || [ -z "$INITRD" ]; then
+    echo "E: Brak jadra lub initrd w $BIN/live!" >&2
+    exit 1
+fi
+KNAME=$(basename "$VMLINUZ")
+INAME=$(basename "$INITRD")
+for f in $(find "$BIN" -type f \( -name '*.cfg' -o -name '*.conf' \) 2>/dev/null); do
+    if grep -q -e 'vmlinuz-\*' -e 'initrd.img-\*' "$f" 2>/dev/null; then
+        sed -i -e "s|vmlinuz-\*[A-Za-z0-9._+-]*|${KNAME}|g" \
+               -e "s|initrd.img-\*[A-Za-z0-9._+-]*|${INAME}|g" "$f"
+        echo "I: poprawiono wpisy jadra w $f"
+    fi
+done
+echo "I: Jadro:  $KNAME"
+echo "I: Initrd: $INAME"
+]]
+
+local function write_bootcfg_hook()
+    sh("mkdir -p config/hooks/normal")
+    local f = io.open(BOOTCFG_HOOK_PATH, "w")
+    if not f then
+        fail("Nie mogę utworzyć pliku: " .. BOOTCFG_HOOK_PATH)
+    end
+    f:write(BOOTCFG_HOOK_CONTENT)
+    f:close()
+    sh("chmod +x " .. quote(BOOTCFG_HOOK_PATH))
+end
+
+-- =====================================================================
 -- GŁÓWNA LOGIKA BUILDA
 -- =====================================================================
 
 local function main()
+    -- Jeśli poprzedni build przerwano (Ctrl+C / crash) i został backup,
+    -- przywracamy oryginał, żeby nie zrobić backupu już spatchowanego pliku
+    -- i nie dublować patcha.
+    restore_backup()
+
     sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
 
     io.write("==> Backup " .. BINARY_FILE .. "...\n")
@@ -180,7 +251,9 @@ local function main()
         quote("config/includes.chroot_after_packages/usr/bin/hackeros-steam")
     )
 
-    do
+    -- (po "lb clean --purge" + "lb config" plik config/chroot jest generowany
+    -- od nowa, więc dopisujemy i386 tylko jeśli wpisu jeszcze nie ma)
+    if os.execute("grep -qs '^LB_ADD_ARCHITECTURES=' config/chroot") ~= true then
         local f = io.open("config/chroot", "a")
         if not f then
             fail("Nie mogę otworzyć do dopisania: config/chroot")
@@ -190,6 +263,7 @@ local function main()
     end
 
     write_xanmod_hook()
+    write_bootcfg_hook()
 
     sh("sudo lb build")
 
