@@ -39,5 +39,6 @@ AmbientCapabilities=CAP_SYS_NICE
 # Limit czasu startu — jeśli gamescope nie wystartuje w 30s, systemd uzna za błąd
 TimeoutStartSec=30
 
-[Install]
-WantedBy=multi-user.target
+# Celowo BRAK sekcji [Install]/WantedBy=: usługa nie może startować przy
+# boot (ani w trybie live). Uruchamiana tylko na żądanie przez
+# `gaming-cli switch game-mode` (systemctl start). System startuje do Plasmy.
