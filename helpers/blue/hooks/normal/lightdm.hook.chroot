@@ -1,0 +1,62 @@
+#!/bin/sh
+# =====================================================================
+# lightdm.hook.chroot - włącza LightDM jako display manager, ale TYLKO gdy
+# w /etc/hackeros/blue-default-dm (zapisywanym przez build-hackeros-blue)
+# jest wartość "lightdm". Przy innych wartościach ten hook nic nie robi.
+#
+# Pakiety (lightdm, lightdm-gtk-greeter) dopisuje do obrazu generowana
+# lista config/package-lists/blue-display-manager.list.chroot, a konfigurację
+# (etc/lightdm/lightdm.conf.d/50-blue-environment.conf) dostarcza
+# includes.chroot_after_packages. Autologin w sesji live zapisuje
+# usr/lib/hackeros/blue-live-autologin.sh.
+# =====================================================================
+set -e
+
+DM="$(cat /etc/hackeros/blue-default-dm 2>/dev/null || echo sddm)"
+if [ "$DM" != "lightdm" ]; then
+    echo "HackerOS Blue: domyślny DM = '$DM' - pomijam konfigurację LightDM."
+    exit 0
+fi
+
+echo "========================================================"
+echo "  HackerOS Blue: konfiguracja LightDM (autostart)..."
+echo "========================================================"
+
+export DEBIAN_FRONTEND=noninteractive
+
+if [ ! -x /usr/sbin/lightdm ] && [ ! -x /usr/bin/lightdm ]; then
+    echo "Błąd: wybrano lightdm, ale brak binarki lightdm (pakiet 'lightdm')." >&2
+    exit 1
+fi
+LIGHTDM_BIN="/usr/sbin/lightdm"
+[ -x "$LIGHTDM_BIN" ] || LIGHTDM_BIN="/usr/bin/lightdm"
+
+echo "$LIGHTDM_BIN" > /etc/X11/default-display-manager
+echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections || true
+
+# Skrót /usr/bin/blue-environment (sesja używa polecenia "blue start", ale
+# skrót ułatwia ręczne uruchomienie z terminala) - jak w hooku SDDM.
+if [ -x /usr/share/Blue-Environment/blue-environment ] && [ ! -e /usr/bin/blue-environment ]; then
+    ln -s /usr/share/Blue-Environment/blue-environment /usr/bin/blue-environment
+fi
+
+chmod +x /usr/lib/hackeros/blue-live-autologin.sh 2>/dev/null || true
+systemctl daemon-reload || true
+systemctl enable blue-live-autologin.service || \
+    echo "Ostrzeżenie: nie udało się włączyć blue-live-autologin.service" >&2
+
+# Pakiet display managera mógł już wskazać INNY display-manager.service
+# (np. sddm, instalowany jako pierwszy). "systemctl enable" odmawia
+# nadpisania istniejącego aliasu, więc usuwamy go i włączamy z --force -
+# wygrywa dokładnie ten menedżer, który wybrano w BLUE_DEFAULT_DM.
+rm -f /etc/systemd/system/display-manager.service
+if [ -f /usr/lib/systemd/system/lightdm.service ] || [ -f /etc/systemd/system/lightdm.service ]; then
+    systemctl enable --force lightdm.service
+else
+    echo "Błąd: brak lightdm.service - czy pakiet 'lightdm' został zainstalowany?" >&2
+    exit 1
+fi
+
+echo "========================================================"
+echo "  HackerOS Blue: LightDM skonfigurowany."
+echo "========================================================"
