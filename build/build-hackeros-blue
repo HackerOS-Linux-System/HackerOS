@@ -76,18 +76,48 @@ local BLUE_ENV_VERSION = os.getenv("BLUE_ENV_VERSION") or "v0.8"
 local BLUE_ENV_REF     = os.getenv("BLUE_ENV_REF") or "main"
 local BLUE_ENVIRONMENT_REPO = "HackerOS-Linux-System/Blue-Environment"
 
--- Domyślny display manager edycji Blue - "hdm" (HackerOS Display Manager,
--- patrz helpers/blue/hooks/normal/hdm.hook.chroot) albo "sddm" (patrz
--- helpers/blue/hooks/normal/sddm-autologin.hook.chroot). Oba pakiety/binarki
--- i tak trafiają do obrazu ISO niezależnie od tego wyboru (można ręcznie
--- przełączyć się na drugi po zainstalowaniu/uruchomieniu systemu) - ten
--- wybór decyduje WYŁĄCZNIE o tym, który z nich hooki włączą jako faktyczny
--- domyślny display-manager przy starcie systemu (patrz niżej: plik-znacznik
--- /etc/hackeros/blue-default-dm, odczytywany przez oba hooki).
+-- Domyślny display manager edycji Blue. Obsługiwane wartości:
+--   "sddm"    (domyślnie) - patrz helpers/blue/hooks/normal/sddm-autologin.hook.chroot
+--   "hdm"     - HackerOS Display Manager, patrz helpers/blue/hooks/normal/hdm.hook.chroot
+--   "lightdm" - LightDM + lightdm-gtk-greeter, patrz helpers/blue/hooks/normal/lightdm.hook.chroot
+--   "gdm"     - GDM (pakiet Debiana: gdm3), patrz helpers/blue/hooks/normal/gdm.hook.chroot
+-- SDDM i HDM (o ile wybrano hdm) trafiają do obrazu ISO niezależnie od
+-- wyboru (można ręcznie przełączyć się na inny po zainstalowaniu/uruchomieniu
+-- systemu). LightDM i GDM są doinstalowywane WYŁĄCZNIE, gdy zostały wybrane
+-- (patrz generowana lista pakietów blue-display-manager.list.chroot niżej -
+-- GDM ciągnie za sobą spory kawałek stosu GNOME, więc nie ma sensu pakować
+-- go do każdego obrazu). Ten wybór decyduje o tym, który z menedżerów hooki
+-- włączą jako faktyczny display-manager przy starcie systemu (plik-znacznik
+-- /etc/hackeros/blue-default-dm, odczytywany przez wszystkie hooki).
+local SUPPORTED_DMS = { "sddm", "hdm", "lightdm", "gdm" }
 local BLUE_DEFAULT_DM = (os.getenv("BLUE_DEFAULT_DM") or "sddm"):lower()
-if BLUE_DEFAULT_DM ~= "hdm" and BLUE_DEFAULT_DM ~= "sddm" then
-    io.stderr:write("Błąd: nieznana wartość BLUE_DEFAULT_DM: '" .. BLUE_DEFAULT_DM ..
-        "' (oczekiwano 'hdm' albo 'sddm')\n")
+do
+    local known = false
+    for _, name in ipairs(SUPPORTED_DMS) do
+        if name == BLUE_DEFAULT_DM then known = true end
+    end
+    if not known then
+        io.stderr:write("Błąd: nieznana wartość BLUE_DEFAULT_DM: '" .. BLUE_DEFAULT_DM ..
+            "' (oczekiwano: " .. table.concat(SUPPORTED_DMS, ", ") .. ")\n")
+        os.exit(1)
+    end
+end
+
+-- Wariant interfejsu (UI) powłoki Blue Environment budowanej ze źródeł:
+--   "default" - klasyczny pulpit (komputery) - dotychczasowe zachowanie,
+--   "phones"  - interfejs dla telefonów (src/phones w repo Blue-Environment),
+--   "tv"      - interfejs dla telewizorów (src/tv w repo Blue-Environment).
+-- Dotyczy WYŁĄCZNIE BLUE_ENV_SOURCE=source - gotowa binarka z GitHub
+-- Releases jest zawsze budowana z domyślnym UI.
+local BLUE_ENV_UI = (os.getenv("BLUE_ENV_UI") or "default"):lower()
+if BLUE_ENV_UI ~= "default" and BLUE_ENV_UI ~= "phones" and BLUE_ENV_UI ~= "tv" then
+    io.stderr:write("Błąd: nieznana wartość BLUE_ENV_UI: '" .. BLUE_ENV_UI ..
+        "' (oczekiwano: default, phones albo tv)\n")
+    os.exit(1)
+end
+if BLUE_ENV_UI ~= "default" and BLUE_ENV_SOURCE ~= "source" then
+    io.stderr:write("Błąd: BLUE_ENV_UI=" .. BLUE_ENV_UI .. " wymaga BLUE_ENV_SOURCE=source " ..
+        "(gotowe binarki z GitHub Releases mają zawsze domyślny interfejs komputerowy).\n")
     os.exit(1)
 end
 
@@ -138,6 +168,34 @@ do
 end
 
 --------------------------------------------------------------------------
+-- 2b. Pakiety wybranego display managera.
+--     sddm jest już na liście helpers/blue/package-lists/live.list.chroot
+--     (zawsze), a HDM to binarki pobierane niżej - więc generujemy
+--     dodatkową listę pakietów TYLKO dla lightdm i gdm. live-build łączy
+--     wszystkie pliki *.list.chroot z config/package-lists/.
+--------------------------------------------------------------------------
+do
+    local DM_PACKAGES = {
+        -- lightdm-gtk-greeter: bez greetera LightDM nie ma czym narysować
+        -- ekranu logowania (Debian daje go tylko jako Recommends).
+        lightdm = { "lightdm", "lightdm-gtk-greeter", "accountsservice" },
+        -- gdm3: nazwa pakietu Debiana. Greeter GDM działa na gnome-shell,
+        -- a Debian wskazuje go tylko jako Recommends - dopisujemy jawnie, żeby
+        -- ekran logowania nie startował "na ślepo". accountsservice trzyma
+        -- wybraną sesję użytkownika (patrz gdm.hook.chroot).
+        gdm     = { "gdm3", "gnome-shell", "gnome-session-bin", "accountsservice" },
+    }
+    local pkgs = DM_PACKAGES[BLUE_DEFAULT_DM]
+    if pkgs then
+        sh("mkdir -p config/package-lists")
+        write_file("config/package-lists/blue-display-manager.list.chroot",
+            "# Wygenerowane przez build/build-hackeros-blue (BLUE_DEFAULT_DM=" .. BLUE_DEFAULT_DM .. ")\n" ..
+            table.concat(pkgs, "\n") .. "\n")
+        heading("Dodatkowe pakiety display managera (" .. BLUE_DEFAULT_DM .. "): " .. table.concat(pkgs, " "))
+    end
+end
+
+--------------------------------------------------------------------------
 -- FUNKCJE: pozyskanie binarki blue-environment (source vs release)
 --------------------------------------------------------------------------
 
@@ -158,6 +216,17 @@ local function build_blue_environment_from_source(dest)
     sh("cd " .. quote(src) .. " && git fetch --depth 1 origin " .. quote(BLUE_ENV_REF) ..
         " && git checkout FETCH_HEAD")
 
+    -- Wariant UI (default/phones/tv): dla phones/tv sprawdzamy, czy wskazany
+    -- ref repo Blue-Environment w ogóle zawiera odpowiedni katalog z kodem
+    -- (src/phones, src/tv) - starsze commity go nie mają, a bez tej kontroli
+    -- build po cichu skończyłby się zwykłym, komputerowym interfejsem.
+    if BLUE_ENV_UI ~= "default" then
+        sh("test -d " .. quote(src .. "/src/" .. BLUE_ENV_UI) .. " || (echo 'Błąd: ref " ..
+            BLUE_ENV_REF .. " repozytorium Blue-Environment nie zawiera katalogu src/" ..
+            BLUE_ENV_UI .. " (interfejs " .. BLUE_ENV_UI .. " nie jest w nim dostępny).' >&2 && exit 1)")
+        heading("Wariant interfejsu Blue Environment: " .. BLUE_ENV_UI)
+    end
+
     sh("cd " .. quote(src) .. " && npm install")
 
     -- Mirror "beforeBuildCommand" z tauri.conf.json tego repo (npm run
@@ -166,7 +235,10 @@ local function build_blue_environment_from_source(dest)
     sh("mkdir -p " .. quote(src .. "/src-tauri/icons"))
     sh("cp " .. quote(src .. "/images/icon.png") .. " " .. quote(src .. "/src-tauri/icons/icon.png"), true)
 
-    sh("cd " .. quote(src) .. " && npm run build:tauri")
+    -- VITE_BLUE_UI wybiera, którą powłokę (src/main.ts -> default, src/phones,
+    -- src/tv) Vite wkompiluje do frontendu - patrz vite.config.ts w repo
+    -- Blue-Environment. "default" jest tym samym, co brak zmiennej.
+    sh("cd " .. quote(src) .. " && VITE_BLUE_UI=" .. quote(BLUE_ENV_UI) .. " npm run build:tauri")
 
     -- Binarka ląduje w target/ w KORZENIU workspace'a (src-tauri jest
     -- członkiem głównego Cargo.toml [workspace]), NIE w src-tauri/target -
@@ -248,26 +320,51 @@ do
 end
 
 --------------------------------------------------------------------------
--- 6. HDM (hdm / hdm-greeter) - TYLKO gdy wybrano BLUE_DEFAULT_DM=hdm
+-- 6. Display manager: pobranie HDM (tylko hdm) + sprzątanie plików
+--    NIEWYBRANYCH menedżerów z drzewa ISO.
 --------------------------------------------------------------------------
 -- POPRAWKA: wcześniej binarki HDM były pobierane ZAWSZE, więc przy wyborze
 -- sddm build i tak próbował ściągnąć hdm (i wywalał się na 404). Teraz:
---   * hdm  -> pobieramy hdm + hdm-greeter do /usr/bin,
---   * sddm -> nic nie pobieramy, a pliki HDM skopiowane z helpers/blue
---             (hdm.service, /etc/hdm) usuwamy z drzewa ISO, żeby nie
---             zostawiać w obrazie jednostki wskazującej na nieistniejący
---             /usr/bin/hdm (która ma Alias=display-manager.service).
+--   * hdm     -> pobieramy hdm + hdm-greeter do /usr/bin,
+--   * pozostałe -> nic nie pobieramy, a pliki HDM skopiowane z helpers/blue
+--                  (hdm.service, /etc/hdm) usuwamy z drzewa ISO, żeby nie
+--                  zostawiać w obrazie jednostki wskazującej na nieistniejący
+--                  /usr/bin/hdm (która ma Alias=display-manager.service).
+-- Analogicznie usuwamy hooki i konfigurację lightdm/gdm, gdy wybrano inny
+-- menedżer - hooki i tak same się pomijają (patrz plik-znacznik), ale
+-- konfiguracja w /etc/lightdm albo /etc/gdm3 bez zainstalowanego pakietu
+-- byłaby tylko śmieciem w obrazie.
+local DM_FILES = {
+    hdm = {
+        "config/includes.chroot_after_packages/etc/systemd/system/hdm.service",
+        "config/includes.chroot_after_packages/etc/hdm",
+        "config/hooks/normal/hdm.hook.chroot",
+    },
+    lightdm = {
+        "config/includes.chroot_after_packages/etc/lightdm",
+        "config/hooks/normal/lightdm.hook.chroot",
+    },
+    gdm = {
+        "config/includes.chroot_after_packages/etc/gdm3",
+        "config/hooks/normal/gdm.hook.chroot",
+    },
+}
+
 if BLUE_DEFAULT_DM == "hdm" then
     for _, name in ipairs({ "hdm", "hdm-greeter" }) do
         local dest = BIN_DIR .. "/" .. name
         download(HDM_BASE .. "/" .. name, dest)
         sh("chmod a+x " .. quote(dest))
     end
-else
-    heading("Wybrano sddm - pomijam pobieranie HDM i usuwam jego pliki z drzewa ISO")
-    sh("rm -f config/includes.chroot_after_packages/etc/systemd/system/hdm.service")
-    sh("rm -rf config/includes.chroot_after_packages/etc/hdm")
-    sh("rm -f config/hooks/normal/hdm.hook.chroot")
+end
+
+for dm, paths in pairs(DM_FILES) do
+    if dm ~= BLUE_DEFAULT_DM then
+        heading("Wybrano " .. BLUE_DEFAULT_DM .. " - usuwam pliki " .. dm .. " z drzewa ISO")
+        for _, path in ipairs(paths) do
+            sh("rm -rf " .. quote(path))
+        end
+    end
 end
 
 --------------------------------------------------------------------------
