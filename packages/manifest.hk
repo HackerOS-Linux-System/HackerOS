@@ -18,7 +18,7 @@
 -> "gaming-cli" => v0.2
 -> hammer => v0.5.0
 -> HackerScript => v0.4
--> H# => v0.9
+-> H# => v0.8
 -> bit => v0.1.0
 -> "HackerOS Builder" => v0.5
 -> "Hacker Mode" => v0.9
