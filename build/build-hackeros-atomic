@@ -140,7 +140,14 @@ kernelList:write(
     "# nawet istniec poza trwajacym buildem). Standardowe jadro Debiana dla\n" ..
     "# edycji atomic, bo hackeros-builder (w przeciwienstwie do live-build)\n" ..
     "# nie doinstalowuje jadra automatycznie.\n" ..
-    "linux-image-amd64\n"
+    "linux-image-amd64\n" ..
+    "# initramfs-tools + live-boot: bez nich initrd nie potrafi wystartowac\n" ..
+    "# z \"boot=live\" i jadro robi \"Attempted to kill init!\". live-build\n" ..
+    "# instalowal je sam; hackeros-builder instaluje tylko to, co jest tutaj.\n" ..
+    "# (hackeros-builder >= poprawka tez dopisuje je sam -- to jest pas i szelki.)\n" ..
+    "initramfs-tools\n" ..
+    "live-boot\n" ..
+    "live-boot-initramfs-tools\n"
 )
 kernelList:close()
 
