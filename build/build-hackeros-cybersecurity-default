@@ -66,6 +66,24 @@ sh("cp -r helpers/cybersecurity-default/. config/")
 -- hackeros-builder -- instalator (razem ze swoja konfiguracja) dostaje ISO
 -- wylacznie od hackeros-builder, nie z config/ tego repo.
 local calamaresConfigDir = "config/includes.chroot_after_packages/etc/calamares"
+-- BRANDING INSTALATORA: hackeros-builder bierze logo i banner instalatora z
+-- config/includes.chroot_after_packages/etc/calamares/branding/debian
+-- (debian-logo.png = logo HackerOS, welcome.png = banner HackerOS). Katalog
+-- etc/calamares usuwamy ponizej, wiec PRZED usunieciem zachowujemy te dwa
+-- pliki w config/installer-branding/ (hackeros-builder szuka tam jako
+-- zapasowej lokalizacji; live-build tego katalogu nie zna, wiec nie trafia
+-- do obrazu).
+do
+    local brandingSrc = calamaresConfigDir .. "/branding/debian"
+    if exists(brandingSrc) then
+        sh("mkdir -p config/installer-branding", true)
+        sh("cp -f " .. quote(brandingSrc .. "/debian-logo.png") .. " config/installer-branding/", true)
+        sh("cp -f " .. quote(brandingSrc .. "/welcome.png") .. " config/installer-branding/", true)
+    else
+        io.stderr:write("Ostrzezenie: brak " .. brandingSrc .. " -- instalator dostanie wygenerowany branding.\n")
+    end
+end
+
 if exists(calamaresConfigDir) then
     sh("rm -rf " .. quote(calamaresConfigDir))
     io.write("Usunieto katalog: " .. calamaresConfigDir .. "\n")
