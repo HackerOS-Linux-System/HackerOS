@@ -146,7 +146,7 @@ local KNOWN_MANIFEST_ENTRIES = {
     "HackerOS Welcome", "hacker", "hnm", "Hacker Lang", "hpm", "chker",
     "getit", "HackerOS Steam", "hsh", "ngt", "hedit", "HackerOS Games",
     "gaming-cli", "hammer", "HackerScript", "H#", "bit", "HackerOS Builder",
-    "Hacker Mode",
+    "Hacker Mode", "HWDE",
 }
 
 local function validate_manifest_entries()
@@ -228,6 +228,11 @@ local VER_BUILDER      = manifest_version("HackerOS Builder")
 -- Hacker Mode (tylko edycja --gaming, patrz step_download_hacker_mode).
 local VER_HACKER_MODE  = manifest_version("Hacker Mode")
 
+-- HWDE (tylko edycja --hwde, patrz step_hwde_pre_build). Wersja z
+-- manifestu zawiera już prefiks "v" (np. v0.2) i jest też nazwą tagu
+-- wydania w repo HWDE: .../releases/download/<VER_HWDE>/hwde
+local VER_HWDE         = manifest_version("HWDE")
+
 -- =====================================================================
 -- ŚCIEŻKI DOCELOWE
 -- =====================================================================
@@ -258,6 +263,15 @@ local HAMMER_TMP         = "/tmp/HackerOS-Hammer"
 
 local CONFIG_DIR         = "config"
 local GAMING_HELPERS_SRC = "helpers/gaming"
+
+-- Edycja --hwde: helpery, repo źródłowe i katalogi tymczasowe.
+local HWDE_HELPERS_SRC   = "helpers/HWDE"
+local HWDE_REPO_URL      = "https://github.com/HackerOS-Linux-System/HWDE.git"
+local HWDE_RELEASES_URL  = "https://github.com/HackerOS-Linux-System/HWDE/releases/download"
+local HWDE_TMP           = "/tmp/HWDE"
+local HWDE_TOOLS_TMP     = "/tmp/HWDE-tools"
+local HWDE_TOOLS_BIN     = HWDE_TOOLS_TMP .. "/bin"
+local PACKAGE_LISTS_DIR_ROOT = "config/package-lists"
 
 -- Nasza własna grafika (marka HackerOS), podmieniana na miejscu domyślnego
 -- tła bootloadera live-build (patrz step_apply_boot_splash niżej).
@@ -343,6 +357,16 @@ local EDITIONS = {
         placeholder  = false,
         pre_build    = "container",
     },
+    -- Edycja HWDE: identyczna jak official, ale zamiast KDE Plasma ma
+    -- środowisko HWDE (HackerOS Wayland Desktop Environment) na labwc.
+    -- HWDE można dostarczyć na dwa sposoby (patrz step_hwde_pre_build):
+    --   domyślnie     - gotowa binarka z wydania GitHub (wersja z manifest.hk),
+    --   --from-source - klon repo HWDE + bit build --release.
+    hwde = {
+        build_script = "build/build-hackeros-hwde",
+        placeholder  = false,
+        pre_build    = "hwde",
+    },
     -- Edycja Server: na razie placeholder (bez własnego build_script ani
     -- pre_build) - katalog helpers/server istnieje już w repo (patrz
     -- helpers/server/package-lists/live.list.chroot), ale dedykowana
@@ -379,12 +403,25 @@ Dostępne flagi edycji (można podać tylko jedną naraz):
   --container                 Kontener roboczy HackerOS-Builder (helpers/container,
                               build/build-hackeros-container, budowany przez
                               "hackeros-builder build container" zamiast live-build/ISO)
+  --hwde                     Edycja HWDE (jak official, ale zamiast KDE Plasma środowisko
+                              HWDE na labwc; helpers/HWDE, build/build-hackeros-hwde)
   --server                   Edycja Server (helpers/server) - PLACEHOLDER,
                               obecnie zachowuje się jak build domyślny
   --help                     Wyświetla tę pomoc
 
+Opcje dodatkowe (nie są edycjami):
+  --from-source              TYLKO z --hwde: zamiast pobierać gotową binarkę hwde
+                              z wydania, klonuje repo HWDE, pobiera bit i hackerc
+                              (wersje z packages/manifest.hk) i buduje przez
+                              "bit build --release". Odpowiednik: HWDE_FROM_SOURCE=1.
+                              HWDE_REF=<branch|tag> wybiera, co sklonować (domyślnie
+                              domyślny branch repo HWDE).
+
 ]])
 end
+
+-- Opcje dodatkowe (nie-edycje). Na razie tylko from_source dla --hwde.
+local OPTIONS = { from_source = false }
 
 -- Parsuje argumenty wiersza poleceń i zwraca nazwę wybranej edycji
 -- (lub nil, jeśli nie podano żadnej flagi).
@@ -396,6 +433,8 @@ local function parse_flag(argv)
         if flag == "help" then
             print_help()
             os.exit(0)
+        elseif flag == "from-source" then
+            OPTIONS.from_source = true
         elseif flag then
             if not EDITIONS[flag] then
                 io.stderr:write("Błąd: nieznana flaga: --" .. flag .. "\n")
@@ -412,6 +451,12 @@ local function parse_flag(argv)
             io.stderr:write("Ostrzeżenie: nieznany argument, ignoruję: " .. a .. "\n")
         end
     end
+
+    if OPTIONS.from_source and selected ~= "hwde" then
+        io.stderr:write("Błąd: --from-source ma sens wyłącznie razem z --hwde\n")
+        os.exit(1)
+    end
+
     return selected
 end
 
@@ -1130,6 +1175,277 @@ local function step_container_pre_build()
     copy_helper_dir("helpers/container", false)
 end
 
+
+-- =====================================================================
+-- --hwde: EDYCJA Z ŚRODOWISKIEM HWDE (labwc) ZAMIAST KDE PLASMA
+-- =====================================================================
+-- Edycja HWDE wykonuje WSZYSTKIE kroki bazowe official (klon
+-- HackerOS-Updates, HackerOS-Apps, narzędzia /usr/bin, gry, Hacker-Lang,
+-- venv Pythona, ...) -- robi to main() przed wywołaniem funkcji niżej.
+-- step_hwde_pre_build dokłada tylko to, co specyficzne dla HWDE:
+--   1. helpers/HWDE -> config/ (lista pakietów z labwc + konfiguracja SDDM),
+--   2. usunięcie z listy pakietów official składników KDE Plasma,
+--   3. binarka /usr/bin/hwde (z wydania ALBO zbudowana ze źródeł),
+--   4. pliki sesji/motywu/przykłady/dokumentacja HWDE.
+
+-- Czy HWDE ma być budowane ze źródeł: flaga --from-source albo zmienna
+-- środowiskowa HWDE_FROM_SOURCE=1/true/yes (wygodne w CI).
+local function hwde_from_source_enabled()
+    if OPTIONS.from_source then
+        return true
+    end
+    local env = (os.getenv("HWDE_FROM_SOURCE") or ""):lower()
+    return env == "1" or env == "true" or env == "yes"
+end
+
+-- Klonuje repo HWDE do HWDE_TMP. ref (branch/tag) jest opcjonalny.
+local function hwde_clone_repo(ref)
+    rmrf(HWDE_TMP)
+    local cmd = "git clone --depth 1 "
+    if ref and ref ~= "" then
+        cmd = cmd .. "--branch " .. quote(ref) .. " "
+    end
+    sh(cmd .. quote(HWDE_REPO_URL) .. " " .. quote(HWDE_TMP))
+end
+
+-- Instaluje jeden plik z klonu HWDE do drzewa config/. required == true
+-- -> brak pliku przerywa build (bez sesji HWDE ISO byłoby bezużyteczne).
+local function hwde_install_file(src_rel, dst, mode, required)
+    local src = HWDE_TMP .. "/" .. src_rel
+    if not exists(src) then
+        if required then
+            io.stderr:write("Błąd: w repo HWDE brakuje wymaganego pliku: " .. src_rel .. "\n")
+            os.exit(1)
+        end
+        io.write("Ostrzeżenie: w repo HWDE brak pliku " .. src_rel .. " - pomijam\n")
+        return
+    end
+    sh("install -D -m " .. mode .. " " .. quote(src) .. " " .. quote(dst))
+end
+
+-- Odpowiednik data/scripts/install.hl z repo HWDE, ale zamiast / celem jest
+-- drzewo config/includes.chroot_after_packages (trafia do rootfs ISO).
+-- Binarkę hwde instaluje osobna funkcja (zależnie od trybu).
+local function step_hwde_install_support_files()
+    heading("HWDE: pliki sesji, motyw, przykłady i dokumentacja")
+
+    hwde_install_file("session/hwde-session",          TARGET_BIN .. "/hwde-session",                         "755", true)
+    hwde_install_file("session/hwde.desktop",          TARGET_SHARE .. "/wayland-sessions/hwde.desktop",      "644", true)
+    hwde_install_file("session/hwde-settings.desktop", APPLICATIONS_DIR .. "/hwde-settings.desktop",          "644", false)
+    hwde_install_file("data/themes/HWDE/openbox-3/themerc",
+                      TARGET_SHARE .. "/themes/HWDE/openbox-3/themerc",                                       "644", false)
+
+    for _, name in ipairs({ "hwde.conf", "custom.css", "rc-extra.xml" }) do
+        hwde_install_file("examples/" .. name, TARGET_SHARE .. "/hwde/examples/" .. name, "644", false)
+    end
+
+    hwde_install_file("data/scripts/remove.hl", TARGET_SHARE .. "/hwde/scripts/remove.hl", "755", false)
+    hwde_install_file("LICENSE",                TARGET_SHARE .. "/licenses/hwde/LICENSE",   "644", false)
+
+    for _, doc in ipairs({ "README.md", "docs/CONFIG.md", "docs/CUSTOMIZATION.md",
+                           "docs/ARCHITECTURE.md", "docs/WALLPAPERS.md" }) do
+        local base = doc:match("([^/]+)$")
+        hwde_install_file(doc, TARGET_SHARE .. "/doc/hwde/" .. base, "644", false)
+    end
+end
+
+-- Tryb domyślny: gotowa binarka z wydania GitHub.
+--   https://github.com/HackerOS-Linux-System/HWDE/releases/download/<wersja z manifest.hk>/hwde
+local function step_hwde_download_release_binary()
+    heading("HWDE: pobieranie binarki z wydania " .. VER_HWDE)
+
+    mkdirp(TARGET_BIN)
+    local dest = TARGET_BIN .. "/hwde"
+    download(HWDE_RELEASES_URL .. "/" .. VER_HWDE .. "/hwde", dest)
+    chmodx(dest)
+end
+
+-- Tryb --from-source: klon repo HWDE, pobranie bit i hackerc (wersje z
+-- manifest.hk), a następnie samo "bit build --release" w sklonowanym repo.
+-- Wymaga zainstalowanego Rusta (>= 1.86 wg README HWDE) i bibliotek
+-- systemowych potrzebnych bibliotece gui -- przygotowuje je workflow CI.
+local function step_hwde_build_from_source()
+    heading("HWDE: budowanie ze źródeł (bit " .. VER_BIT .. ", hackerc " .. VER_HACKERSCRIPT .. ")")
+
+    -- 1. narzędzia: bit i hackerc (HackerScript) z wydań, wg manifest.hk
+    rmrf(HWDE_TOOLS_TMP)
+    mkdirp(HWDE_TOOLS_BIN)
+
+    download("https://github.com/HackerOS-Linux-System/bit/releases/download/" ..
+             VER_BIT .. "/bit", HWDE_TOOLS_BIN .. "/bit")
+    chmodx(HWDE_TOOLS_BIN .. "/bit")
+
+    download("https://github.com/HackerOS-Linux-System/HackerScript/releases/download/" ..
+             VER_HACKERSCRIPT .. "/hackerc", HWDE_TOOLS_BIN .. "/hackerc")
+    chmodx(HWDE_TOOLS_BIN .. "/hackerc")
+
+    if os.execute("command -v cargo >/dev/null 2>&1") ~= true then
+        io.write("Ostrzeżenie: nie znaleziono cargo w PATH - bit build --release wymaga Rusta (>= 1.86).\n")
+    end
+
+    -- 2. klon repo HWDE (HWDE_REF pozwala przypiąć branch/tag)
+    hwde_clone_repo(os.getenv("HWDE_REF"))
+
+    -- 3. właśnie to: uruchamiamy po prostu bit (hackerc jest w PATH, bo bit
+    -- wywołuje go przy kompilacji)
+    sh("cd " .. quote(HWDE_TMP) .. " && env PATH=" .. quote(HWDE_TOOLS_BIN) ..
+       ':"$PATH" bit build --release')
+
+    -- 4. wynik: ./hwde (README HWDE); na wszelki wypadek szukamy też głębiej
+    local built = HWDE_TMP .. "/hwde"
+    if not exists(built) then
+        built = capture(
+            "find " .. quote(HWDE_TMP) .. " -type f -name hwde -perm -u+x " ..
+            "-not -path '*/.git/*' -not -path '*/data/*' -not -path '*/session/*' 2>/dev/null | head -n 1"
+        )
+    end
+    if built == "" or not exists(built) then
+        io.stderr:write("Błąd: bit build --release nie wytworzył binarki hwde w " .. HWDE_TMP .. "\n")
+        os.exit(1)
+    end
+
+    mkdirp(TARGET_BIN)
+    sh("install -m 755 " .. quote(built) .. " " .. quote(TARGET_BIN .. "/hwde"))
+end
+
+-- Usuwa z config/package-lists/live.list.chroot (lista pakietów official)
+-- składniki KDE Plasma, żeby HWDE był jedynym środowiskiem graficznym.
+-- ZOSTAJĄ: sddm (menedżer logowania - sesja HWDE jest zwykłą sesją
+-- Wayland), aplikacje KDE (dolphin, kate, konsole, ...) i
+-- plasma-integration (motyw platformy Qt dla aplikacji). Zmień tabele
+-- niżej, jeśli ma być inaczej.
+local HWDE_KDE_REMOVE_PATTERNS = {
+    "^plasma%-",          -- plasma-desktop, plasma-workspace, plasma-nm, plasma-pa, plasma-discover, ...
+    "^plasma$",
+    "^kde%-plasma",       -- kde-plasma-desktop
+    "^kde%-standard$",
+    "^kde%-full$",
+    "^kwin",              -- kwin-wayland, kwin-x11, kwin-common, ...
+    "^kscreen$",
+    "^powerdevil$",
+    "^kdeplasma%-addons$",
+    "^kinfocenter$",
+    "^systemsettings$",
+    "^bluedevil$",
+    "^kde%-config%-sddm$",
+    "^xdg%-desktop%-portal%-kde$",
+    "^khotkeys$",
+    "^ksystemstats$",
+    "^kactivitymanagerd$",
+    "^kmenuedit$",
+    "^milou$",
+    "^drkonqi$",
+}
+local HWDE_KDE_KEEP = {
+    ["plasma-integration"] = true,
+}
+
+local function hwde_is_kde_shell_package(name)
+    if HWDE_KDE_KEEP[name] then
+        return false
+    end
+    for _, pat in ipairs(HWDE_KDE_REMOVE_PATTERNS) do
+        if name:match(pat) then
+            return true
+        end
+    end
+    return false
+end
+
+local function step_hwde_remove_kde_packages()
+    heading("HWDE: usuwanie składników KDE Plasma z listy pakietów official")
+
+    local list_path = PACKAGE_LISTS_DIR_ROOT .. "/live.list.chroot"
+    local f = io.open(list_path, "r")
+    if not f then
+        io.write("Ostrzeżenie: nie znaleziono " .. list_path ..
+                 " - nie ma z czego usuwać pakietów KDE (pomijam)\n")
+        return
+    end
+
+    local kept, removed = {}, {}
+    for line in f:lines() do
+        -- nazwa pakietu = pierwszy token linii bez komentarza
+        local name = line:gsub("#.*$", ""):match("^%s*(%S+)")
+        if name and hwde_is_kde_shell_package(name) then
+            removed[#removed + 1] = name
+        else
+            kept[#kept + 1] = line
+        end
+    end
+    f:close()
+
+    local out = assert(io.open(list_path, "w"))
+    out:write(table.concat(kept, "\n"), "\n")
+    out:close()
+
+    io.write("Usunięto z " .. list_path .. " (" .. #removed .. "): " ..
+             (#removed > 0 and table.concat(removed, ", ") or "(nic)") .. "\n")
+end
+
+-- Jeśli official ma w configu SDDM autologin/sesję na Plasmę, podmieniamy
+-- ją na sesję HWDE (hwde.desktop). Dotyczy tylko linii Session=...plasma...
+local function step_hwde_patch_sddm_session()
+    heading("HWDE: podmiana sesji Plasma -> HWDE w konfiguracji SDDM")
+
+    local etc = "config/includes.chroot_after_packages/etc"
+    local targets = {}
+    if exists(etc .. "/sddm.conf") then
+        targets[#targets + 1] = etc .. "/sddm.conf"
+    end
+    if isdir(etc .. "/sddm.conf.d") then
+        local h = io.popen("find " .. quote(etc .. "/sddm.conf.d") .. " -type f -name '*.conf' 2>/dev/null")
+        if h then
+            for path in h:lines() do
+                targets[#targets + 1] = path
+            end
+            h:close()
+        end
+    end
+
+    if #targets == 0 then
+        io.write("Brak plików konfiguracyjnych SDDM w " .. etc .. " - nic do podmiany\n")
+        return
+    end
+
+    for _, path in ipairs(targets) do
+        -- zwykłe -E (bez wieloznaczności \s) - plik jest tekstem INI
+        sh("sed -i -E 's/^([[:space:]]*Session[[:space:]]*=).*plasma.*$/\\1hwde.desktop/I' " .. quote(path), true)
+    end
+end
+
+local function step_hwde_pre_build()
+    heading("Tryb --hwde: dodatkowe operacje")
+
+    local from_source = hwde_from_source_enabled()
+    io.write("HWDE " .. VER_HWDE .. " - tryb: " ..
+             (from_source and "BUDOWANIE ZE ŹRÓDEŁ (bit build --release)"
+                           or "binarka z wydania GitHub") .. "\n")
+
+    -- 1. helpers/HWDE -> config/ (bez sudo: dalsze kroki zapisują do tych
+    -- samych katalogów jako zwykły użytkownik)
+    copy_helper_dir(HWDE_HELPERS_SRC, false)
+
+    -- 2. KDE Plasma precz, SDDM na sesję HWDE
+    step_hwde_remove_kde_packages()
+    step_hwde_patch_sddm_session()
+
+    -- 3. binarka hwde + repo ze wspierającymi plikami
+    if from_source then
+        step_hwde_build_from_source()   -- klonuje repo do HWDE_TMP (HWDE_REF)
+    else
+        step_hwde_download_release_binary()
+        -- pliki sesji muszą pochodzić z TEGO SAMEGO wydania co binarka
+        hwde_clone_repo(VER_HWDE)
+    end
+
+    -- 4. pliki sesji, motyw, przykłady, dokumentacja
+    step_hwde_install_support_files()
+
+    rmrf(HWDE_TMP)
+    rmrf(HWDE_TOOLS_TMP)
+end
+
 -- Tabela dowiązująca klucz pre_build z EDITIONS do konkretnej funkcji.
 local EDITION_PRE_BUILD = {
     hydra     = step_hydra_pre_build,
@@ -1139,6 +1455,7 @@ local EDITION_PRE_BUILD = {
     nvidia    = step_nvidia_pre_build,
     atomic    = step_atomic_pre_build,
     container = step_container_pre_build,
+    hwde      = step_hwde_pre_build,
 }
 
 -- =====================================================================
