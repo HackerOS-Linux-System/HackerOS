@@ -1,1 +1,87 @@
+#!/usr/bin/env lua5.5
 
+local function quote(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function sh(cmd)
+    io.write("+ " .. cmd .. "\n")
+    local ok = os.execute(cmd)
+    if ok ~= true and ok ~= 0 then
+        io.stderr:write("Błąd: polecenie nie powiodło się: " .. cmd .. "\n")
+        os.exit(1)
+    end
+    return true
+end
+
+local function exists(path)
+    return os.execute("test -e " .. quote(path)) == true
+end
+
+-- Uwaga: wszystko, co specyficzne dla HWDE, robi już build.lua w kroku
+-- step_hwde_pre_build (EDITION_PRE_BUILD["hwde"]), PRZED uruchomieniem tego
+-- skryptu:
+--   * helpers/HWDE -> config/ (config/package-lists/hwde.list.chroot z labwc
+--     i zależnościami HWDE, config/.../etc/sddm.conf.d/zz-hwde.conf),
+--   * usunięcie składników KDE Plasma z config/package-lists/live.list.chroot,
+--   * binarka /usr/bin/hwde (z wydania ALBO zbudowana ze źródeł),
+--   * hwde-session, hwde.desktop, motyw, przykłady i dokumentacja HWDE.
+-- Tu - przed właściwym "lb build" - tylko sprawdzamy, czy to wszystko
+-- faktycznie jest na miejscu, żeby nie zbudować po godzinie ISO bez
+-- działającej sesji HWDE.
+
+local INCLUDES = "config/includes.chroot_after_packages"
+
+local required = {
+    INCLUDES .. "/usr/bin/hwde",
+    INCLUDES .. "/usr/bin/hwde-session",
+    INCLUDES .. "/usr/share/wayland-sessions/hwde.desktop",
+    "config/package-lists/hwde.list.chroot",
+}
+
+for _, path in ipairs(required) do
+    if not exists(path) then
+        io.stderr:write("Błąd: brak wymaganego pliku edycji HWDE: " .. path ..
+                        " (czy build.lua został uruchomiony z --hwde?)\n")
+        os.exit(1)
+    end
+end
+
+-- labwc MUSI być na liście pakietów (to jedyny kompozytor tej edycji).
+if os.execute("grep -qE '^[[:space:]]*labwc[[:space:]]*$' config/package-lists/hwde.list.chroot") ~= true then
+    io.stderr:write("Błąd: config/package-lists/hwde.list.chroot nie zawiera pakietu labwc\n")
+    os.exit(1)
+end
+
+-- Ostrzeżenie (nie błąd), gdyby KDE Plasma jednak została na liście Official.
+if exists("config/package-lists/live.list.chroot") and
+   os.execute("grep -qE '^[[:space:]]*(plasma-desktop|kde-plasma-desktop|plasma-workspace)[[:space:]]*(#.*)?$' " ..
+              "config/package-lists/live.list.chroot") == true then
+    io.stderr:write("Ostrzeżenie: live.list.chroot nadal zawiera KDE Plasma - " ..
+                    "ISO będzie miało oba środowiska\n")
+end
+
+sh("chmod +x " .. quote(INCLUDES .. "/usr/bin/hwde") .. " " .. quote(INCLUDES .. "/usr/bin/hwde-session"))
+
+-- Debootstrap nie zna jeszcze "forky" jako takiego - podpinamy go pod skrypt "sid"
+sh("sudo ln -sf /usr/share/debootstrap/scripts/sid /usr/share/debootstrap/scripts/forky")
+
+-- Czyścimy poprzednie buildy
+sh("sudo lb clean --purge")
+
+-- Konfiguracja live-build z firmware i repo non-free-firmware
+-- (identyczna jak w edycji Official - HWDE to ta sama baza, forky/testing).
+sh(
+    "lb config " ..
+    "--distribution forky " ..
+    "--architectures amd64 " ..
+    '--apt-options "--allow-unauthenticated --yes" ' ..
+    "--firmware-chroot true " ..
+    -- forky to wciąż Debian testing - brak security.debian.org dla niego
+    "--security false " ..
+    -- gnupg potrzebny już po debootstrapie (import kluczy config/archives/*)
+    '--debootstrap-options "--include=gnupg"'
+)
+
+-- Budowa obrazu
+sh("sudo lb build")
