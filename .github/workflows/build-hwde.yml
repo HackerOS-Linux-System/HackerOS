@@ -1,1 +1,152 @@
+name: Build HackerOS HWDE Edition
 
+# Edycja HWDE = dokładnie ten sam build co Official (lua5.5 build.lua), ale z
+# flagą --hwde: zamiast KDE Plasma ISO dostaje środowisko HWDE na labwc.
+# HWDE można dostarczyć na dwa sposoby (parametr build_from_source):
+#   false (domyślnie) - gotowa binarka z wydania GitHub (wersja z packages/manifest.hk)
+#   true              - klon repo HWDE + bit build --release (bit i hackerc wg manifest.hk)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_from_source:
+        description: "Zbuduj HWDE ze źródeł (klon repo + bit build --release) zamiast pobierać binarkę z wydania"
+        type: boolean
+        default: false
+      hwde_ref:
+        description: "Tylko przy budowaniu ze źródeł: branch/tag repo HWDE (puste = domyślny branch)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-hwde-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build HWDE ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # Build w Debianie testing (forky) - ta sama baza co budowany system:
+    # aktualne live-build/debootstrap/klucze archiwum oraz lua5.5 i python3.13
+    # prosto z apt. --privileged jest potrzebne debootstrapowi/live-build
+    # (mount, chroot). Katalogi hosta są montowane, żeby zwolnić miejsce na
+    # dysku runnera (ISO + chroot zajmują kilkanaście GB).
+    container:
+      image: debian:testing
+      options: >-
+        --privileged
+        -v /usr/local/lib/android:/host/android
+        -v /usr/share/dotnet:/host/dotnet
+        -v /opt/ghc:/host/ghc
+        -v /opt/hostedtoolcache:/host/hostedtoolcache
+
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      BUILD_FROM_SOURCE: ${{ inputs.build_from_source }}
+      HWDE_REF: ${{ inputs.hwde_ref }}
+
+    steps:
+      - name: Podstawowe narzędzia (przed checkoutem)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git sudo xz-utils
+
+      - name: Zwolnienie miejsca na dysku runnera
+        run: |
+          rm -rf /host/android/* /host/dotnet/* /host/ghc/* /host/hostedtoolcache/* || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Odczyt wersji z config.hk
+        id: ver
+        run: |
+          VERSION="$(sed -n 's/.*version[[:space:]]*=>[[:space:]]*\([0-9][0-9.]*\).*/\1/p' config.hk | head -n 1)"
+          [ -n "$VERSION" ] || { echo "Nie udało się odczytać version z config.hk" >&2; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Wersja HackerOS: $VERSION"
+
+      - name: Instalacja narzędzi do budowania ISO
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            live-build debootstrap debian-archive-keyring lua5.5 \
+            squashfs-tools xorriso mtools dosfstools cpio rsync zip unzip \
+            syslinux syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin \
+            gnupg apt-utils procps librsvg2-bin
+          # build.lua tworzy venv przez "python3.13" - ta sama wersja co w systemie docelowym
+          if ! apt-get install -y --no-install-recommends python3.13 python3.13-venv; then
+            echo "::warning::python3.13 niedostępny w testing - używam python3 pod nazwą python3.13"
+            apt-get install -y --no-install-recommends python3 python3-venv
+            ln -sf "$(command -v python3)" /usr/local/bin/python3.13
+          fi
+          lua5.5 -v
+          lb --version || true
+
+      - name: Narzędzia do budowania HWDE ze źródeł (Rust + biblioteki)
+        if: ${{ inputs.build_from_source }}
+        run: |
+          apt-get install -y --no-install-recommends \
+            build-essential pkg-config cmake clang \
+            libwayland-dev libxkbcommon-dev libfontconfig-dev libfreetype-dev \
+            libpam0g-dev libdbus-1-dev libssl-dev
+          # HWDE wymaga Rusta >= 1.86 - rustup daje aktualny stable niezależnie od apt
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Budowanie ISO (lua5.5 build.lua --hwde)
+        run: |
+          ARGS="--hwde"
+          if [ "$BUILD_FROM_SOURCE" = "true" ]; then
+            ARGS="$ARGS --from-source"
+          fi
+          # puste HWDE_REF = domyślny branch; ustawione tylko jeśli podano
+          [ -n "$HWDE_REF" ] || unset HWDE_REF
+          echo "Uruchamiam: lua5.5 build.lua $ARGS"
+          lua5.5 build.lua $ARGS
+
+      - name: Wyszukanie zbudowanych obrazów ISO
+        id: iso
+        run: |
+          mkdir -p outputs
+          mapfile -t ISOS < <(find . -maxdepth 2 -type f -name '*.iso' -not -path './outputs/*')
+          if [ "${#ISOS[@]}" -eq 0 ]; then
+            echo "Błąd: build zakończył się bez pliku .iso" >&2
+            exit 1
+          fi
+          i=0
+          for f in "${ISOS[@]}"; do
+            i=$((i + 1))
+            suffix=""; [ "$i" -gt 1 ] && suffix="-$i"
+            dest="outputs/HackerOS-V${{ steps.ver.outputs.version }}-HWDE${suffix}.iso"
+            mv "$f" "$dest"
+            (cd outputs && sha256sum "$(basename "$dest")" > "$(basename "$dest").sha256")
+          done
+          ls -lh outputs
+
+      - name: Wgranie artefaktu
+        uses: actions/upload-artifact@v4
+        with:
+          # Nazwa zgodna z test.lua: hackeros-v<wersja>-<edycja>
+          name: HackerOS-V${{ steps.ver.outputs.version }}-HWDE
+          path: outputs/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Podsumowanie
+        run: |
+          {
+            echo "### HackerOS ${{ steps.ver.outputs.version }} - edycja HWDE"
+            echo ""
+            echo "- HWDE: $( [ "$BUILD_FROM_SOURCE" = "true" ] && echo "zbudowane ze źródeł (bit build --release)" || echo "binarka z wydania (wersja z packages/manifest.hk)" )"
+            echo ""
+            echo '```'
+            (cd outputs && ls -lh)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
