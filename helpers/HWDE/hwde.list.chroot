@@ -1,0 +1,45 @@
+# =====================================================================
+# HackerOS - edycja HWDE: pakiety DODATKOWE względem edycji Official
+# =====================================================================
+# Ten plik trafia do config/package-lists/hwde.list.chroot (build.lua,
+# step_hwde_pre_build -> copy_helper_dir("helpers/HWDE")). live-build
+# scala go z config/package-lists/live.list.chroot (lista Official, z
+# której build.lua usuwa składniki KDE Plasma), więc tu są wyłącznie
+# dodatki potrzebne HWDE.
+
+# --- kompozytor ---
+labwc
+xwayland
+
+# --- wymagane/zalecane przez HWDE (README: "Wymagania") ---
+# tapeta (obraz, pokaz slajdów)
+swaybg
+# nocne światło
+wlsunset
+# skala/układ ekranu
+wlr-randr
+# wygaszanie ekranu
+wlopm
+# jasność
+brightnessctl
+# zrzuty ekranu
+grim
+slurp
+
+# --- dźwięk (wpctl/pactl), sieć, Bluetooth ---
+wireplumber
+pipewire-pulse
+network-manager
+bluez
+rfkill
+
+# --- portale i uprawnienia ---
+xdg-desktop-portal
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+lxqt-policykit
+
+# --- sesja ---
+# dbus-run-session używany przez hwde-session
+dbus-user-session
+xdg-user-dirs
