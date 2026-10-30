@@ -2,7 +2,7 @@
 What is HackerOS? HackerOS is a Polish Linux distribution based on Debian testing/stable.
 
 ## Editions
-HackerOS has 10 editions:
+HackerOS has 11 editions:
 
 - Official Editon - The regular edition and the most important one for HackerOS.
 - Cybersecurity Edition - This edition is aimed at cybersecurity, primarily for the Red Team. It features a dedicated kernel (HackerOS Kernel) optimized for cybersecurity, a XEN hypervisor, a proprietary Cybersecurity Mode graphical environment, proprietary cybersecurity tools, and, in the future, a proprietary GhostFS file system. Based on Debian Stable.
@@ -14,3 +14,4 @@ HackerOS has 10 editions:
 - Gaming Edition - An edition with a game mode inspired by SteamOS or Bazzite. But intended for PC/laptops only.
 - LTS Edition - An edition equipped with everything the official edition has, but with the Debian stable channel.
 - Atomic Edition - Edition with read-only file system and atomic proprietary hammer package manager (BETA).
+- HWDE Edition - The official version, but instead of KDE Plasma it ships HWDE (HackerOS Wayland Desktop Environment), a lightweight shell for the labwc compositor.
