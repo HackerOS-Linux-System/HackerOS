@@ -21,6 +21,13 @@ on:
 permissions:
   contents: read
 
+# Job biegnie w kontenerze debian:testing, gdzie domyślną powłoką kroków jest
+# "sh -e" (dash) - nie zna on mapfile ani "< <(...)" (krok wyszukiwania ISO
+# kończył się "Syntax error: redirection unexpected"). Wymuszamy bash.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: build-hwde-${{ github.ref }}
   cancel-in-progress: false
