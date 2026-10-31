@@ -1,4 +1,4 @@
-name: Build HackerOS HWDE Edition
+name: Build HackerOS HWDE
 
 # Edycja HWDE = dokładnie ten sam build co Official (lua5.5 build.lua), ale z
 # flagą --hwde: zamiast KDE Plasma ISO dostaje środowisko HWDE na labwc.
