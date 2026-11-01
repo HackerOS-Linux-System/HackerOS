@@ -1426,6 +1426,12 @@ local function step_hwde_pre_build()
     -- samych katalogów jako zwykły użytkownik)
     copy_helper_dir(HWDE_HELPERS_SRC, false)
 
+    -- hooki z helpers/HWDE/hooks muszą być wykonywalne (cp -r nie zawsze
+    -- zachowuje bit x, np. po rozpakowaniu z .zip). Hook 9990-hwde-no-lxqt
+    -- usuwa sesję LXQt (wciągniętą przez lxqt-policykit) i ustawia labwc
+    -- jako jej WM - bez tego może wyskoczyć "Welcome to LXQt".
+    sh("find config/hooks -type f -name '*.hook.*' -exec chmod +x {} +", true)
+
     -- 2. KDE Plasma precz, SDDM na sesję HWDE
     step_hwde_remove_kde_packages()
     step_hwde_patch_sddm_session()
