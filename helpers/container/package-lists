@@ -19,7 +19,6 @@ cargo
 rustc
 golang
 npm
-python3.14-venv
 lua5.5
 valac
 llvm-21-dev
