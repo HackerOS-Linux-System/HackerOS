@@ -774,33 +774,15 @@ local function step_hnm_skel()
 end
 
 -- =====================================================================
--- KROK 13: WIRTUALNE ŚRODOWISKO PYTHON W .hackeros
+-- KROK 13: (usunięty) - build.lua nigdzie nie tworzy venv Pythona
 -- =====================================================================
+-- Wcześniej ten krok tworzył ~/.hackeros/venv (python3.13 -m venv + pip).
+-- Python został porzucony w projektach HackerOS, więc build nie tworzy
+-- żadnego venv-a ani nie uruchamia pip/python3.13. Zostaje tylko katalog
+-- szkieletu .hackeros (używany przez kroki hacker-lang / hnm).
 
-local function step_python_venv()
-    heading("Tworzenie venv Python i instalacja pakietów w .hackeros")
-
+local function step_ensure_hackeros_skel()
     mkdirp(HACKEROS_SKEL)
-    sh("cd " .. quote(HACKEROS_SKEL) .. " && python3.13 -m venv venv")
-
-    local pip = HACKEROS_SKEL .. "/venv/bin/pip"
-
-    local packages = {
-        "prompt-toolkit",
-        "rich",
-        "pygments",
-        "requests",
-        "urllib3",
-        "mdurl",
-        "markdown-it-py",
-        "idna",
-        "charset-normalizer",
-        "certifi",
-    }
-
-    for _, pkg in ipairs(packages) do
-        sh(quote(pip) .. " install " .. pkg)
-    end
 end
 
 -- =====================================================================
@@ -991,7 +973,7 @@ end
 -- repo HackerOS-Builder, internal/config/config.go). main() już wykonuje
 -- dla TEJ edycji dokładnie te same kroki bazowe co dla official (klon
 -- HackerOS-Updates, HackerOS-Apps, narzędzia /usr/bin, gry, Hacker-Lang,
--- venv Pythona, ...) -- ta funkcja dokłada WYŁĄCZNIE to, co jest
+-- ... ) -- ta funkcja dokłada WYŁĄCZNIE to, co jest
 -- specyficzne dla kontenera.
 
 -- Ścieżka pliku źródłowego z listą pakietów kontenera -- ZWYKŁY, płaski
@@ -1159,7 +1141,7 @@ end
 
 -- --container: lista pakietów, usunięcie Calamares, dodatkowe binarki,
 -- helpers/container -> config/. Wszystkie inne narzędzia (HackerOS-Apps,
--- /usr/bin, gry, Hacker-Lang, venv Pythona, ...) są już pobrane przez
+-- /usr/bin, gry, Hacker-Lang, ...) są już pobrane przez
 -- main() PRZED wywołaniem tej funkcji -- dokładnie te same kroki co dla
 -- official, więc nie są tu powtarzane.
 local function step_container_pre_build()
@@ -1181,7 +1163,7 @@ end
 -- =====================================================================
 -- Edycja HWDE wykonuje WSZYSTKIE kroki bazowe official (klon
 -- HackerOS-Updates, HackerOS-Apps, narzędzia /usr/bin, gry, Hacker-Lang,
--- venv Pythona, ...) -- robi to main() przed wywołaniem funkcji niżej.
+-- ... ) -- robi to main() przed wywołaniem funkcji niżej.
 -- step_hwde_pre_build dokłada tylko to, co specyficzne dla HWDE:
 --   1. helpers/HWDE -> config/ (lista pakietów z labwc + konfiguracja SDDM),
 --   2. usunięcie z listy pakietów official składników KDE Plasma,
@@ -1627,7 +1609,7 @@ local function main()
     step_download_games()
     step_hacker_lang()
     step_hnm_skel()
-    step_python_venv()
+    step_ensure_hackeros_skel()
     step_chmod_static_files()
 
     if edition == "gaming" then
