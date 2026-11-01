@@ -22,6 +22,7 @@ npm
 lua5.5
 luarocks
 valac
+g++
 llvm-21-dev
 libpolly-21-dev
 libzstd-dev
