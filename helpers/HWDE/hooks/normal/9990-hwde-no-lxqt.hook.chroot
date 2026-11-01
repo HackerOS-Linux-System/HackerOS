@@ -1,0 +1,56 @@
+#!/bin/sh
+# HackerOS - edycja HWDE: LXQt NIE jest środowiskiem tej edycji.
+#
+# Problem: pakiet lxqt-policykit (agent polkit używany przez HWDE) ma twardą
+# zależność od lxqt-session, więc do obrazu trafia cała sesja LXQt
+# (/usr/share/xsessions/lxqt.desktop). Jeśli SDDM / Calamares wybierze ją
+# zamiast sesji HWDE, użytkownik widzi okno "Welcome to LXQt - Please select
+# your default Window Manager" z pustą listą (lxqt-session nie zna labwc).
+#
+# Naprawa (trzy warstwy, każda działa niezależnie):
+#   1. usuwamy pliki sesji LXQt - nie da się jej wybrać ani uruchomić z SDDM,
+#   2. domyślny menedżer okien LXQt = labwc (okno wyboru nigdy się nie pojawi,
+#      nawet gdyby ktoś uruchomił lxqt-session ręcznie),
+#   3. Calamares domyślnie wskazuje sesję hwde.desktop.
+set -e
+
+# --- 1. brak sesji LXQt w SDDM ---------------------------------------
+rm -f /usr/share/xsessions/lxqt*.desktop \
+      /usr/share/wayland-sessions/lxqt*.desktop
+
+# --- 2. domyślny WM dla LXQt = labwc ---------------------------------
+# lxqt-session czyta [General] window_manager z session.conf; gdy klucz
+# jest ustawiony, okno "Welcome to LXQt" w ogóle się nie wyświetla.
+write_lxqt_session_conf() {
+    dir="$1"
+    mkdir -p "$dir"
+    cat > "$dir/session.conf" <<'CONF'
+[General]
+window_manager=labwc
+leave_confirmation=false
+CONF
+}
+write_lxqt_session_conf /etc/xdg/lxqt
+write_lxqt_session_conf /etc/skel/.config/lxqt
+
+# --- 3. domyślna sesja instalatora = HWDE ----------------------------
+# (SDDM w live ma już Session=hwde.desktop z etc/sddm.conf.d/zz-hwde.conf.)
+# Calamares (zainstalowany system): defaultDesktopEnvironment -> HWDE,
+# inaczej moduł displaymanager wybiera pierwszą znalezioną sesję.
+DM=/etc/calamares/modules/displaymanager.conf
+if [ -f "$DM" ]; then
+    awk '
+        /^defaultDesktopEnvironment:/ { skip = 1; next }
+        skip && /^[[:space:]]+/       { next }
+        { skip = 0; print }
+    ' "$DM" > "$DM.new"
+    cat >> "$DM.new" <<'CONF'
+
+defaultDesktopEnvironment:
+    executable: "hwde-session"
+    desktopFile: "hwde"
+CONF
+    mv "$DM.new" "$DM"
+fi
+
+exit 0
