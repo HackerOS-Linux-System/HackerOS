@@ -37,6 +37,9 @@ rfkill
 xdg-desktop-portal
 xdg-desktop-portal-wlr
 xdg-desktop-portal-gtk
+# UWAGA: lxqt-policykit zależy od lxqt-session (sesja LXQt trafia do ISO).
+# Hook hooks/normal/9990-hwde-no-lxqt.hook.chroot usuwa jej pliki sesji i
+# ustawia labwc jako WM LXQt, więc okno "Welcome to LXQt" się nie pojawia.
 lxqt-policykit
 
 # --- sesja ---
