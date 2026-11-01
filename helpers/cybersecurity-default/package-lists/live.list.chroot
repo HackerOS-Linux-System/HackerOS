@@ -13,7 +13,6 @@ plymouth
 plymouth-themes
 zsh
 flatpak
-python3.13-venv
 pip
 curl
 wget
