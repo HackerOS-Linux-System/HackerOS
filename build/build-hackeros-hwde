@@ -37,6 +37,8 @@ local required = {
     INCLUDES .. "/usr/bin/hwde-session",
     INCLUDES .. "/usr/share/wayland-sessions/hwde.desktop",
     "config/package-lists/hwde.list.chroot",
+    -- hook usuwający sesję LXQt (okno "Welcome to LXQt" bez listy WM)
+    "config/hooks/normal/9990-hwde-no-lxqt.hook.chroot",
 }
 
 for _, path in ipairs(required) do
