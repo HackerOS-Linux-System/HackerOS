@@ -9,10 +9,10 @@ windowPlacement: center
 strings:
     productName:         HackerOS
     shortProductName:    HackerOS
-    version:             4
-    shortVersion:        4
-    versionedName:       HackerOS 5.0
-    shortVersionedName:  HackerOS 5.0
+    version:             5
+    shortVersion:        5
+    versionedName:       HackerOS 5.1
+    shortVersionedName:  HackerOS 5.1
     bootloaderEntryName: HackerOS
     productUrl:          https://hackeros-linux-system.github.io/HackerOS-Website/Home-page.html
     supportUrl:          https://github.com/HackerOS-Linux-System/HackerOS/discussions
