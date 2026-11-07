@@ -1,1 +1,76 @@
+#!/bin/bash
+# =====================================================================
+# unpack-hackeros-cybersecurity-tools.hook.chroot
+# =====================================================================
+#
+# Pobiera i uruchamia oficjalny skrypt instalacyjny narzedzi
+# cybersecurity publikowany w repo:
+#   https://github.com/HackerOS-Linux-System/cybersecurity-tools
+#   (plik: scripts/for-editions/install.lua)
+#
+# Skrypt jest napisany w Lua i wykonywany interpreterem "lua5.5"
+# (pakiet lua5.5 jest juz czescia bazowej listy pakietow - patrz
+# config/package-lists/live.list.chroot - wiec jest obecny w chroot
+# zanim ten hook sie wykona).
+#
+# Ten hook obsluguje PELNA edycje cybersecurity - skrypt install.lua
+# jest uruchamiany BEZ zadnej dodatkowej flagi, wiec instaluje pelny
+# zestaw narzedzi przewidziany dla tej edycji.
+#
+# (Edycja cybersecurity-default dziedziczy ten sam plik - patrz
+# build/build-hackeros-cybersecurity-default, ktory najpierw kopiuje
+# helpers/cybersecurity/. do config/, a dopiero potem na to
+# helpers/cybersecurity-default/. - ale dostaje WLASNY dodatkowy hook
+# w hooks/live/HackerOS-Red-Team-Tools.hook.chroot, ktory ten sam
+# skrypt uruchamia ponownie z flaga "--default").
+#
+# Styl bledoodpornosci jest spojny z reszta hookow tej edycji
+# (helpers/cybersecurity/hooks/normal/setup-cybersecurity-tools.hook.chroot):
+# brak globalnego "set -e" na poziomie calego pliku, zeby nieudane
+# pobranie/wykonanie nie wywalilo calego builda ISO - blad jest tylko
+# logowany.
 
+set -u
+export DEBIAN_FRONTEND=noninteractive
+
+LOG_FILE="/var/log/hackeros-cybersecurity-tools-unpack.log"
+SCRIPT_URL="https://raw.githubusercontent.com/HackerOS-Linux-System/cybersecurity-tools/main/scripts/for-editions/install.lua"
+WORK_DIR="$(mktemp -d /tmp/hackeros-cybersecurity-tools.XXXXXX)"
+SCRIPT_PATH="$WORK_DIR/install.lua"
+
+mkdir -p "$(dirname "$LOG_FILE")"
+: > "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+cleanup() {
+    rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
+echo "=== unpack-hackeros-cybersecurity-tools.hook.chroot ==="
+echo "Pobieranie: $SCRIPT_URL"
+
+if ! curl -fsSL -A "HackerOS-unpack-cybersecurity-tools-hook/1.0" -o "$SCRIPT_PATH" "$SCRIPT_URL"; then
+    echo "BLAD: nie udalo sie pobrac $SCRIPT_URL" >&2
+    exit 0
+fi
+
+if [ ! -s "$SCRIPT_PATH" ]; then
+    echo "BLAD: pobrany plik install.lua jest pusty" >&2
+    exit 0
+fi
+
+if ! command -v lua5.5 >/dev/null 2>&1; then
+    echo "BLAD: interpreter 'lua5.5' nie jest dostepny w PATH - sprawdz czy pakiet" >&2
+    echo "      lua5.5 jest obecny w package-lists tej edycji." >&2
+    exit 0
+fi
+
+echo "=== Uruchamianie install.lua (pelna edycja cybersecurity, bez flagi) ==="
+if lua5.5 "$SCRIPT_PATH"; then
+    echo "=== install.lua zakonczyl sie powodzeniem ==="
+else
+    echo "BLAD: install.lua zakonczyl sie bledem - sprawdz log powyzej." >&2
+fi
+
+exit 0
