@@ -13,7 +13,7 @@
 -> "HackerOS Steam" => v0.5
 -> hsh => v0.4
 -> ngt => v0.5
--> hedit => v0.5
+-> hedit => v0.6
 -> "HackerOS Games" => v0.8
 -> "gaming-cli" => v0.2
 -> hammer => v0.7.0
